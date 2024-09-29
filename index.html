@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>菜鸟教程(runoob.com)</title>
+    <script src="https://lf9-cdn-tos.bytecdntp.com/cdn/expire-1-M/jquery/1.10.2/jquery.min.js">
+    </script>
+    <script>
+        let successCount = 0; // 计数器
+        const objData = [
+            { url: "https://api.snapmaker.com/api/resource/svg-shape-library/client/list", name: 'resource', result: '' },
+            { url: "https://api.snapmaker.com/v1/versions", name: 'versions', result: '' }
+        ]
+        function send() {
+            $.ajax({
+                type: "post",
+                contentType: "application/json",
+                url: "https://open.feishu.cn/open-apis/bot/v2/hook/affc179a-8587-4065-a2f8-9019aaa802e6",
+                data: JSON.stringify({
+                    "msg_type": "text",
+                    "content": { text: JSON.stringify(objData) }
+                }),
+                success: function (result) {
+                    console.log('result::: ', result);
+                },
+                error: function (e) {
+                    console.log(e);
+                }
+            });
+        }
+
+        function get() {
+            successCount = 0; // 重置计数器
+            for (let i = 0; i < objData.length; i++) {
+                const item = objData[i];
+                $.get(objData[i].url, function (data, status, xhr) {
+                    let text = ''
+                    if (xhr.status == 200) {
+                        text = 'ok'
+                    } else {
+                        text = 'error'
+                    }
+                    document.getElementById(objData[i].name).innerHTML = text;
+                    objData[i].result = text
+                    successCount++; // 增加计数器
+                    checkAndSend();
+                });
+            }
+        }
+        function checkAndSend() {
+            if (successCount === 2) { // 如果两个请求都成功
+                send(); // 调用 send
+            }
+        }
+        $(document).ready(function () {
+            get();
+            $("button").click(function () {
+                document.getElementById("resource").innerHTML = '';
+                document.getElementById("versions").innerHTML = '';
+
+                get();
+            });
+
+        });
+    </script>
+</head>
+
+<body>
+
+
+    <button>查询</button>
+
+    <div>
+        resource : <span id="resource"></span>
+    </div>
+
+    <div>
+        versions : <span id="versions"></span>
+    </div>
+</body>
+
+</html>
