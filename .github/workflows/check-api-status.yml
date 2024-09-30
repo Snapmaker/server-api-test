@@ -18,7 +18,7 @@ jobs:
         echo "::set-output name=status_code::$status_code"
       
     - name: Send Feishu Notification if API check fails
-      #if: steps.check_status.outputs.status_code != '200'
+      if: steps.check_status.outputs.status_code != '200'
       run: |
         curl -X POST \
           -H 'Content-Type: application/json' \
@@ -40,7 +40,7 @@ jobs:
         echo "::set-output name=status_code::$status_code"
       
     - name: Send Feishu Notification if API check fails
-      #if: steps.check_status.outputs.status_code != '200'
+      if: steps.check_status.outputs.status_code != '200'
       run: |
         curl -X POST \
           -H 'Content-Type: application/json' \
