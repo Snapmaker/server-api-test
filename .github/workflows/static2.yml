@@ -7,7 +7,7 @@ on:
     - cron: '*/1 * * * *'
 
 jobs:
-  check-api:
+  check-api1:
     runs-on: ubuntu-latest
     steps:
     - name: Check API status
@@ -28,3 +28,26 @@ jobs:
               "text": "https://api.snapmaker.com/v1/versions API check failed. Status code: '${{ steps.check_status.outputs.status_code }}'"
             }
           }' https://open.feishu.cn/open-apis/bot/v2/hook/affc179a-8587-4065-a2f8-9019aaa802e6
+
+  check-api2:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check API status
+      id: check_status
+      run: |
+        status_code=$(curl -o /dev/null -s -w "%{http_code}\n" https://api.snapmaker.com/api/resource/svg-shape-library/client/list)
+        echo "Status code: $status_code"
+        echo "::set-output name=status_code::$status_code"
+      
+    - name: Send Feishu Notification if API check fails
+      if: steps.check_status.outputs.status_code == '200'
+      run: |
+        curl -X POST \
+          -H 'Content-Type: application/json' \
+          -d '{
+            "msg_type": "text",
+            "content": {
+              "text": "https://api.snapmaker.com/v1/versions API check failed. Status code: '${{ steps.check_status.outputs.status_code }}'"
+            }
+          }' https://open.feishu.cn/open-apis/bot/v2/hook/affc179a-8587-4065-a2f8-9019aaa802e6
+      
