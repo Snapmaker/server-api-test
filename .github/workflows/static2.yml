@@ -1,6 +1,8 @@
 name: Check API and Notify on Failure
 
 on:
+  push:
+    branches: ["main"]
   schedule:
     - cron: '*/1 * * * *'
 
