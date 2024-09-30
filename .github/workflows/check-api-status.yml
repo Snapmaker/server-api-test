@@ -27,7 +27,7 @@ jobs:
             "content": {
               "text": "https://api.snapmaker.com/v1/versions API check failed. Status code: '${{ steps.check_status.outputs.status_code }}'"
             }
-          }' https://open.feishu.cn/open-apis/bot/v2/hook/affc179a-8587-4065-a2f8-9019aaa802e6
+          }' "${{ secrets.FEISHU_WEBHOOK }}"
 
   check-api2:
     runs-on: ubuntu-latest
@@ -49,5 +49,5 @@ jobs:
             "content": {
               "text": "https://api.snapmaker.com/api/resource/svg-shape-library/client/list API check failed. Status code: '${{ steps.check_status.outputs.status_code }}'"
             }
-          }' https://open.feishu.cn/open-apis/bot/v2/hook/affc179a-8587-4065-a2f8-9019aaa802e6
+          }' "${{ secrets.FEISHU_WEBHOOK }}"
       
