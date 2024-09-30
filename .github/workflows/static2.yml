@@ -1,46 +1,28 @@
-# Simple workflow for deploying static content to GitHub Pages
-name: Deploy static content to Pages
+name: Check API and Notify on Failure
 
 on:
-  # Runs on pushes targeting the default branch
-  push:
-    branches: ["main"]
-
   schedule:
-    - cron: '*/1 * * * *'  # once a minute
-
-  # Allows you to run this workflow manually from the Actions tab
-  workflow_dispatch:
-
-# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
-# Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
-# However, do NOT cancel in-progress runs as we want to allow these production deployments to complete.
-concurrency:
-  group: "pages"
-  cancel-in-progress: false
+    - cron: '*/1 * * * *'
 
 jobs:
-  # Single deploy job since we're just deploying
-  deploy:
-    environment:
-      name: github-pages
-      url: 'https://snapmaker.github.io/server-api-test/'
+  check-api:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          # Upload entire repository
-          path: '.'
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+    - name: Check API status
+      id: check_status
+      run: |
+        status_code=$(curl -o /dev/null -s -w "%{http_code}\n" https://api.snapmaker.com/v1/versions)
+        echo "Status code: $status_code"
+        echo "::set-output name=status_code::$status_code"
+      
+    - name: Send Feishu Notification if API check fails
+      if: steps.check_status.outputs.status_code != '200'
+      run: |
+        curl -X POST \
+          -H 'Content-Type: application/json' \
+          -d '{
+            "msg_type": "text",
+            "content": {
+              "text": "https://api.snapmaker.com/v1/versions API check failed. Status code: '${{ steps.check_status.outputs.status_code }}'"
+            }
+          }' https://open.feishu.cn/open-apis/bot/v2/hook/affc179a-8587-4065-a2f8-9019aaa802e6
