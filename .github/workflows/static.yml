@@ -29,4 +29,5 @@ jobs:
     steps:
       - name: Open Link
         run: |
-          echo "Opening link: https://snapmaker.github.io/server-api-test/"
+          RESULT=$(curl -o /dev/null -s -w "%{http_code}\n" https://api.snapmaker.com/v1/versions)
+          curl -X POST -H "Content-Type: application/json" -d "{\"msg_type\": \"text\", \"content\": {\"text\": \"HTTP Status Code: $RESULT\"}}" https://open.feishu.cn/open-apis/bot/v2/hook/affc179a-8587-4065-a2f8-9019aaa802e6
