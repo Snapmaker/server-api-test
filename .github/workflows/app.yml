@@ -1,0 +1,39 @@
+name: Check HTTP Status
+
+on: [push]
+
+jobs:
+  check-status:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send HTTP request using curl
+        run: |
+          # 发送 HTTP 请求，并保存状态码
+          status_code=$(curl -o /dev/null -s -w "%{http_code}" https://api.snapmaker.com/v1/versions)
+
+          # 输出状态码
+          echo "Status Code: $status_code"
+
+          # 检查状态码
+          if [ "$status_code" -ne 200 ]; then
+            echo "Request failed with status code $status_code"
+            exit 1
+          else
+            echo "Request succeeded with status code $status_code"
+          fi
+
+
+  
+      # always()  # 不论前面的 job 成功或失败都会执行
+      - name: Notify via Feishu
+        if: always() 
+        run: |
+          curl -X POST https://open.feishu.cn/open-apis/bot/v2/hook/affc179a-8587-4065-a2f8-9019aaa802e6 \
+            -H 'Content-Type: application/json' \
+            -d '{
+            "msg_type": "text",
+            "content": {
+              "text": "CI/CD Job Status: ok"
+            }
+          }'
+      
