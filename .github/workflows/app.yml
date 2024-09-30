@@ -26,7 +26,6 @@ jobs:
   
       # always()  # 不论前面的 job 成功或失败都会执行
       - name: Notify via Feishu
-        if: always() 
         run: |
           curl -X POST https://open.feishu.cn/open-apis/bot/v2/hook/affc179a-8587-4065-a2f8-9019aaa802e6 \
             -H 'Content-Type: application/json' \
