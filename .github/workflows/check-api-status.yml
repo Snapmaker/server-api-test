@@ -28,7 +28,7 @@ jobs:
               -d '{
                 "msg_type": "text",
                 "content": {
-                  "text": "$api: API check failed. Status code: $response"
+                  "text": "${api}: API check failed. Status code: ${response}"
                 }
               }' "${{ secrets.FEISHU_WEBHOOK }}"
           fi
