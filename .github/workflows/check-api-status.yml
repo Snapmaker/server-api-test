@@ -12,15 +12,15 @@ jobs:
     steps:
     - name: Get API List
       run: |
-        echo "${{ secrets.NEED_CHECK_URLS}}"
-        apis=("${{ secrets.NEED_CHECK_URLS}}")
+        echo "${{ secrets.NEED_CHECK_URLS }}"
+        apis=("${{ secrets.NEED_CHECK_URLS }}")
     - name: Check APIs status
       id: check_status
       run: |
         for element in "${apis[@]}"; do
-          echo "Accessing API with element $element"
+          echo "Accessing API with element ${element}"
           response=$(curl -o /dev/null -s -w "%{http_code}\n" "${element}")
-          if [ "$response" == "200" ]; then
+          if [ "${response}" == "200" ]; then
             echo "HTTP状态码不等于200，发送通知..."
             curl -X POST \
               -H 'Content-Type: application/json' \
