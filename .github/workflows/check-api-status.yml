@@ -12,8 +12,16 @@ jobs:
     steps:
     - name: Get API List
       run: |
-        IFS=$'\n' read -r -d '' -a apis <<< "${{ secrets.NEED_CHECK_URLS }}"
-        echo "APIs to check: ${apis[@]}"
+        # 使用 while 读取多行内容并逐行保存到数组
+        apis=()
+        while IFS= read -r line || [ -n "$line" ]; do
+          apis+=("$line")
+        done <<< "${{ secrets.NEED_CHECK_URLS }}"
+        
+        # 打印解析后的 API 列表
+        for api in "${apis[@]}"; do
+          echo "API: $api"
+        done
     - name: Check APIs status
       id: check_status
       run: |
