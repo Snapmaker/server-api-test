@@ -19,25 +19,24 @@ jobs:
         done <<< "${{ secrets.NEED_CHECK_URLS }}"
         
         # 打印解析后的 API 列表
-        for api in "${apis[@]}"; do
-          echo "API: $api"
-        done
+        # for api in "${apis[@]}"; do
+        #   echo "API: $api"
+        # done
     - name: Check APIs status
       id: check_status
       run: |
         for element in "${apis[@]}"; do
-          echo "Accessing API with element ${element}"
-          response=$(curl -o /dev/null -s -w "%{http_code}\n" "${element}")
-          echo "response ${response}"
+          echo "Accessing API with element $element"
+          response=$(curl -o /dev/null -s -w "%{http_code}\n" "$element")
           echo "response $response"
-          if [ "${response}" == "200" ]; then
+          if [ "$response" == "200" ]; then
             echo "HTTP状态码不等于200，发送通知..."
             curl -X POST \
               -H 'Content-Type: application/json' \
               -d '{
                 "msg_type": "text",
                 "content": {
-                  "text": "${element}: API check failed. Status code: $response"
+                  "text": "$element: API check failed. Status code: $response"
                 }
               }' "${{ secrets.FEISHU_WEBHOOK }}"
           fi
