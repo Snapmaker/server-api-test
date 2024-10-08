@@ -12,27 +12,27 @@ jobs:
     steps:
     - name: Get API List
       run: |
-        apis=($(echo -e "${{ secrets.NEED_CHECK_URLS}}"))
+        apis=("${{ secrets.NEED_CHECK_URLS}}")
     - name: Check APIs status
       id: check_status
       run: |
         i=0
-          for element in "${apis[@]}"; do
-            ((i++))
-            echo "Accessing API with element $element"
-            response=$(curl -o /dev/null -s -w "%{http_code}\n" "${element}")
-            if [ "$response" == "200" ]; then
-              echo "HTTP状态码不等于200，发送通知..."
-              curl -X POST \
-            -H 'Content-Type: application/json' \
-            -d '{
-              "msg_type": "text",
-              "content": {
-                "text": "${element}: API check failed. Status code: $response"
-              }
-            }' "${{ secrets.FEISHU_WEBHOOK }}"
-            fi
-          done
+        for element in "${apis[@]}"; do
+          ((i++))
+          echo "Accessing API with element $element"
+          response=$(curl -o /dev/null -s -w "%{http_code}\n" "${element}")
+          if [ "$response" == "200" ]; then
+            echo "HTTP状态码不等于200，发送通知..."
+            curl -X POST \
+              -H 'Content-Type: application/json' \
+              -d '{
+                "msg_type": "text",
+                "content": {
+                  "text": "${element}: API check failed. Status code: $response"
+                }
+              }' "${{ secrets.FEISHU_WEBHOOK }}"
+          fi
+        done
     # - name: Check API status
     #   id: check_status
     #   run: |
