@@ -12,13 +12,12 @@ jobs:
     steps:
     - name: Get API List
       run: |
+        echo "${{ secrets.NEED_CHECK_URLS}}"
         apis=("${{ secrets.NEED_CHECK_URLS}}")
     - name: Check APIs status
       id: check_status
       run: |
-        i=0
         for element in "${apis[@]}"; do
-          ((i++))
           echo "Accessing API with element $element"
           response=$(curl -o /dev/null -s -w "%{http_code}\n" "${element}")
           if [ "$response" == "200" ]; then
