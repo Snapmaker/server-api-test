@@ -10,21 +10,13 @@ jobs:
   check-api:
     runs-on: ubuntu-latest
     steps:
-    - name: Get API List
+    - name: Check APIs status
+      id: check_status
       run: |
-        # 使用 while 读取多行内容并逐行保存到数组
         apis=()
         while IFS= read -r line || [ -n "$line" ]; do
           apis+=("$line")
         done <<< "${{ secrets.NEED_CHECK_URLS }}"
-        
-        # 打印解析后的 API 列表
-        # for api in "${apis[@]}"; do
-        #   echo "API: $api"
-        # done
-    - name: Check APIs status
-      id: check_status
-      run: |
         for element in "${apis[@]}"; do
           echo "Accessing API with element $element"
           # response=$(curl -o /dev/null -s -w "%{http_code}\n" "$element")
