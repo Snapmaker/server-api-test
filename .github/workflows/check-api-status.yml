@@ -12,8 +12,8 @@ jobs:
     steps:
     - name: Get API List
       run: |
-        echo "${{ secrets.NEED_CHECK_URLS }}"
-        apis=("${{ secrets.NEED_CHECK_URLS }}")
+        IFS=$'\n' read -r -d '' -a apis <<< "${{ secrets.NEED_CHECK_URLS }}"
+        echo "APIs to check: ${apis[@]}"
     - name: Check APIs status
       id: check_status
       run: |
