@@ -7,47 +7,48 @@ on:
     - cron: '0 * * * *'
 
 jobs:
-  check-api1:
+  check-api:
     runs-on: ubuntu-latest
     steps:
-    - name: Check API status
+    - name: Get API List
+      run: |
+        apis=($(echo -e "${{ secrets.NEED_CHECK_URLS}}"))
+    - name: Check APIs status
       id: check_status
       run: |
-        status_code=$(curl -o /dev/null -s -w "%{http_code}\n" "${{ secrets.VERSIONS_URL}}")
-        echo "Status code: $status_code"
-        echo "::set-output name=status_code::$status_code"
+        i=0
+          for element in "${apis[@]}"; do
+            ((i++))
+            echo "Accessing API with element $element"
+            response=$(curl -o /dev/null -s -w "%{http_code}\n" "${element}")
+            if [ "$response" == "200" ]; then
+              echo "HTTP状态码不等于200，发送通知..."
+              curl -X POST \
+            -H 'Content-Type: application/json' \
+            -d '{
+              "msg_type": "text",
+              "content": {
+                "text": "${element}: API check failed. Status code: $response"
+              }
+            }' "${{ secrets.FEISHU_WEBHOOK }}"
+            fi
+          done
+    # - name: Check API status
+    #   id: check_status
+    #   run: |
+    #     status_code=$(curl -o /dev/null -s -w "%{http_code}\n" "${{ secrets.VERSIONS_URL}}")
+    #     echo "Status code: $status_code"
+    #     echo "::set-output name=status_code::$status_code"
       
-    - name: Send Feishu Notification if API check fails
-      if: steps.check_status.outputs.status_code != '200'
-      run: |
-        curl -X POST \
-          -H 'Content-Type: application/json' \
-          -d '{
-            "msg_type": "text",
-            "content": {
-              "text": "${{ secrets.VERSIONS_URL}}: API check failed. Status code: '${{ steps.check_status.outputs.status_code }}'"
-            }
-          }' "${{ secrets.FEISHU_WEBHOOK }}"
+    # - name: Send Feishu Notification if API check fails
+    #   if: steps.check_status.outputs.status_code != '200'
+    #   run: |
+    #     curl -X POST \
+    #       -H 'Content-Type: application/json' \
+    #       -d '{
+    #         "msg_type": "text",
+    #         "content": {
+    #           "text": "${{ secrets.VERSIONS_URL}}: API check failed. Status code: '${{ steps.check_status.outputs.status_code }}'"
+    #         }
+    #       }' "${{ secrets.FEISHU_WEBHOOK }}"
 
-  check-api2:
-    runs-on: ubuntu-latest
-    steps:
-    - name: Check API status
-      id: check_status
-      run: |
-        status_code=$(curl -o /dev/null -s -w "%{http_code}\n" "${{ secrets.CLIENT_LIST_URL}}")
-        echo "Status code: $status_code"
-        echo "::set-output name=status_code::$status_code"
-      
-    - name: Send Feishu Notification if API check fails
-      if: steps.check_status.outputs.status_code != '200'
-      run: |
-        curl -X POST \
-          -H 'Content-Type: application/json' \
-          -d '{
-            "msg_type": "text",
-            "content": {
-              "text": "${{ secrets.CLIENT_LIST_URL}}: API check failed. Status code: '${{ steps.check_status.outputs.status_code }}'"
-            }
-          }' "${{ secrets.FEISHU_WEBHOOK }}"
-      
