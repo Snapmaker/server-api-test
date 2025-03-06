@@ -20,7 +20,7 @@ jobs:
         for api in "${apis[@]}"; do
           echo "Accessing API with element $api"
           response=$(curl -o /dev/null -s -w "%{http_code}\n" "$api")
-          if [ "$response" == "200" ]  then
+          if [ "$response" == "200" ]; then
             echo "HTTP状态码不等于200且不等于301/302，发送通知..."
             curl -X POST \
               -H 'Content-Type: application/json' \
