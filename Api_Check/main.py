@@ -13,8 +13,8 @@ def main():
    #
     client = UserClient()
     result = client.login()
-    # result=client.getcode(username=os.getenv("USER"))
-    # client.urlcheck()
+    result=client.getcode(username=os.getenv("USER_CODE"))
+    client.urlcheck()
 
 
 if __name__ == "__main__":
