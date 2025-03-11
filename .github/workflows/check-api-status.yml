@@ -25,7 +25,9 @@ jobs:
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
     - name: Run API Check
-      run: python main.py
+      run: |
+        pwd
+        python main.py
       env:
         API_BASE_URL: ${{ secrets.API_BASE_URL }}
         VERIFICATION_CODE_ENDPOINT: ${{ secrets.VERIFICATION_CODE_ENDPOINT }}
