@@ -27,7 +27,7 @@ jobs:
     - name: Run API Check
       run: |
         cd ..
-        pwd
+        cd Api_Check
         python main.py
       env:
         API_BASE_URL: ${{ secrets.API_BASE_URL }}
