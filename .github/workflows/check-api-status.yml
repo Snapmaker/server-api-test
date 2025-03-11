@@ -26,7 +26,6 @@ jobs:
 
     - name: Run API Check
       run: |
-        cd ..
         cd Api_Check
         python main.py
       env:
