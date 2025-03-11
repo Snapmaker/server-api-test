@@ -4,9 +4,7 @@ charset-normalizer==3.4.1
 colorama==0.4.6
 config==0.5.1
 idna==3.10
-iniconfg==2.0.0
 packaging==24.2
-pip==25.0.1
 pluggy==1.5.0
 pydantic==2.10.6
 pydantic-settings==2.8.1
