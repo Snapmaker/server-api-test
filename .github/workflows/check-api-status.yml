@@ -7,39 +7,33 @@ on:
     - cron: '0 * * * *'
 
 jobs:
-  check-api:
+  build:
     runs-on: ubuntu-latest
+    
     steps:
-    - name: Check APIs status
-      id: check_status
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.12"
+
+    - name: Install dependencies
       run: |
-        apis=()
-        while IFS= read -r line || [ -n "$line" ]; do
-          apis+=("$line")
-        done <<< "${{ secrets.NEED_CHECK_URLS }}"
-        for api in "${apis[@]}"; do
-          echo "Accessing API with element $api"
-          response=$(curl -o /dev/null -s -w "%{http_code}\n" "$api")
-          # if [ "$response" == "200" ]; then
-          #   echo "HTTP状态码不等于200且不等于301/302，发送通知..."
-          #   curl -X POST \
-          #     -H 'Content-Type: application/json' \
-          #     -d '{
-          #       "msg_type": "text",
-          #       "content": {
-          #         "text": "'"$api"': API check failed. Status code: '"$response"'"
-          #       }
-          #     }' "${{ secrets.FEISHU_WEBHOOK }}"
-          # fi
-          if [ "$response" != "200" ] && [ "$response" != "301" && [ "$response" != "302" ]; then
-            echo "HTTP状态码不等于200且不等于301/302，发送通知..."
-            curl -X POST \
-              -H 'Content-Type: application/json' \
-              -d '{
-                "msg_type": "text",
-                "content": {
-                  "text": "'"$api"': API check failed. Status code: '"$response"'"
-                }
-              }' "${{ secrets.FEISHU_WEBHOOK }}"
-          fi
-        done
+        python -m pip install --upgrade pip
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+    - name: Run API Check
+      run: python main.py
+      env:
+        API_BASE_URL: ${{ secrets.API_BASE_URL }}
+        VERIFICATION_CODE_ENDPOINT: ${{ secrets.VERIFICATION_CODE_ENDPOINT }}
+        OAUTH_TOKEN_ENDPOINT: ${{ secrets.OAUTH_TOKEN_ENDPOINT }}
+        CLIENT_ID: ${{ secrets.CLIENT_ID }}
+        CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+        REQUEST_TIMEOUT: ${{ secrets.REQUEST_TIMEOUT }}
+        FEISHU_API: ${{ secrets.FEISHU_API }}
+        URLS: ${{ secrets.URLS }}  
+        USER: ${{ secrets.USER }}
+        PAW: ${{ secrets.PAW }}
