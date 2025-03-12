@@ -35,6 +35,7 @@ class UserClient:
             timeout=self.timeout
         )
         response.raise_for_status()
+        print("登录服务无异常")
         return None
       except RequestException as e:
           error_info ={
@@ -55,6 +56,7 @@ class UserClient:
             url=f"{url}",
             timeout=self.timeout
         )
+           print("网址无异常")
          except RequestException as e:
           error_info = {
              "error_type": e.__class__.__name__,
@@ -78,10 +80,10 @@ class UserClient:
             },
             timeout=self.timeout
         )
-        response.raise_for_status()  # 如果状态码非 2xx，抛出 HTTPError
+        response.raise_for_status()
+        print("验证码无异常")
         return None  # 成功时不返回数据
       except RequestException as e:
-        # 统一处理所有 requests 异常（超时、连接错误、HTTP 错误等）
         error_info = {
             "error_type": e.__class__.__name__,
             "error_message": str(e),
