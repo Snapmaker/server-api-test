@@ -56,7 +56,6 @@ class UserClient:
             url=f"{url}",
             timeout=self.timeout
         )
-           print("网址无异常")
          except RequestException as e:
           error_info = {
              "error_type": e.__class__.__name__,
