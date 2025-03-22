@@ -72,7 +72,7 @@ class UserClient:
                     "request_url": url,
                     "timestamp": datetime.datetime.now().isoformat()
                 }
-                 self.feishusend(error_info)
+                self.feishusend(error_info)
     #使用post方法验证短信验证码服务是否能正常使用
     def getcode(self, username):
       try:
