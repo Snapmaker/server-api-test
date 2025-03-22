@@ -46,15 +46,13 @@ class UserClient:
           }
           self.feishusend(error_info)
           return None
-
     #使用GET方法检查URL是否能正常访问
     def urlcheck(self) :
         for url in settings.URLS:
             max_retries = 3
             retries = 0
             last_exception = None  # 记录最后一次异常
-
-          while retries < max_retries:
+            while retries < max_retries:
                 try:
                     # 发起请求并校验状态码
                     response = requests.get(url=url, timeout=self.timeout)
@@ -67,17 +65,14 @@ class UserClient:
                         # 指数退避：1s, 2s, 4s（可选）
                         time.sleep(2 ** retries)
             # 如果重试3次后仍失败，发送错误报告
-           if retries >= max_retries and last_exception:
+            if retries >= max_retries and last_exception:
                 error_info = {
                     "error_type": last_exception.__class__.__name__,
                     "error_message": str(last_exception),
                     "request_url": url,
                     "timestamp": datetime.datetime.now().isoformat()
                 }
-
                  self.feishusend(error_info)
-
-
     #使用post方法验证短信验证码服务是否能正常使用
     def getcode(self, username):
       try:
