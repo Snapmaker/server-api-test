@@ -4,6 +4,7 @@ from .config import settings
 from .auth import generate_basic_auth
 from requests.exceptions import RequestException
 import datetime
+import time
 class UserClient:
     def __init__(self):
         self.base_url = settings.API_BASE_URL
