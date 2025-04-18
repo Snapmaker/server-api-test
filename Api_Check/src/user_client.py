@@ -3,7 +3,9 @@ import requests
 from .config import settings
 from .auth import generate_basic_auth
 from requests.exceptions import RequestException
+from urllib.parse import urlencode
 import datetime
+import json
 import time
 class UserClient:
     def __init__(self):
@@ -16,37 +18,60 @@ class UserClient:
     def _get_headers(self) -> Dict[str, str]:
         return {
             "Authorization": generate_basic_auth(),
-            "Content-Type": "application/x-www-form-urlencoded"
+            "Content-Type": "multipart/form-data",
+            "User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/118.0.0.0 Safari/537.36"
 
         }
-    #登录服务API检查
-    def login(self ):
 
-      try:
-        response = requests.post(
-            verify=False,
-            url=f"{self.base_url}{settings.OAUTH_TOKEN_ENDPOINT}",
-            data={
+    def login(self):
+        try:
+            start_time = time.time()
+            url = f"{self.base_url}{settings.OAUTH_TOKEN_ENDPOINT}"
+            data = {
                 "grant_type": "password",
                 "username": settings.USER,
                 "password": settings.PAW,
                 "scope": "openid profile"
-            },
-            headers=self._get_headers(),
-            timeout=self.timeout
-        )
-        response.raise_for_status()
-        print("登录服务无异常")
-        return None
-      except RequestException as e:
-          error_info ={
-              "error_type": e.__class__.__name__,
-              "error_message": str(e),
-              "request_url": f"{self.base_url}{settings.OAUTH_TOKEN_ENDPOINT}",
-              "timestamp": datetime.datetime.now().isoformat()
-          }
-          self.feishusend(error_info)
-          return None
+            }
+            headers = self._get_headers()
+            data_string= urlencode(data)
+            full_url = f"{url}?{data_string}"
+            proxies = {
+                "http": "http://127.0.0.1:8080",
+                "https": "http://127.0.0.1:8080"
+            }
+
+            response = requests.post(
+                verify=False,
+                url=full_url,
+                headers=headers,
+                timeout=self.timeout,
+                #proxies=proxies  # 👈 加代理
+            )
+            request_duration = time.time() - start_time
+
+            print(response)
+            print("响应体:", response.text)
+            print(f"请求耗时: {request_duration:.2f}秒")
+            response.raise_for_status()
+            print("登录服务无异常")
+            return None
+
+        except RequestException as e:
+            request_duration = time.time() - start_time
+            error_info = {
+                "error_type": e.__class__.__name__,
+                "error_message": str(e),
+                "request_url": url,
+                "request_data": data,
+                "request_headers": headers,
+                "timestamp": datetime.datetime.now().isoformat(),
+                "request_duration": f"{request_duration:.2f}秒",
+            }
+            print("请求异常，详细信息如下：")
+            print(json.dumps(error_info, indent=2, ensure_ascii=False))
+            self.feishusend(error_info)
+            return None
     #使用GET方法检查URL是否能正常访问
     def urlcheck(self) :
         for url in settings.URLS:
