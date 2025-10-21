@@ -15,7 +15,7 @@ def main():
     result = client.login()
     result=client.getcode(username=os.getenv("USER_CODE"))
     client.urlcheck()
-
+ #   print(result)
 
 if __name__ == "__main__":
     main()
