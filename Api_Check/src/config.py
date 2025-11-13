@@ -14,7 +14,6 @@ class Settings(BaseSettings):
     API_CN_BASE_URL: str = "https://api.snapmaker.cn/api/"
 
     # ============================================
-    # 认证凭证（必需，从环境变量读取）
     # ============================================
     CLIENT_ID: str = ""
     CLIENT_SECRET: str = ""
@@ -37,7 +36,8 @@ class Settings(BaseSettings):
     # 其他配置
     # ============================================
     REQUEST_TIMEOUT: int = 30
-    FEISHU_API: str = ""  # 飞书 Webhook，不配置则不发送通知
+    FEISHU_API: str  # 飞书 Webhook，不配置则不发送通知
+
 
     class Config:
         env_file = ".env"
@@ -45,6 +45,8 @@ class Settings(BaseSettings):
         case_sensitive = False  # 环境变量不区分大小写
         # 允许从系统环境变量读取，优先级：系统环境变量 > .env 文件 > 默认值
         extra = 'ignore'  # 忽略额外的环境变量
+
+
 
 
 settings = Settings()
