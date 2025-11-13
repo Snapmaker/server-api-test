@@ -1,21 +1,23 @@
+"""API 监控脚本 - 主程序"""
 import sys
 import os
 from dotenv import load_dotenv
+
 load_dotenv()
-sys.path.append(os.path.dirname(__file__))  # 添加项目根目录到路径
-import json
-from src import UserClient, settings
+sys.path.append(os.path.dirname(__file__))
+
+from src import APIMonitor
 
 
 def main():
-   # 显示当前配置验证
-   #  print(f"当前API端点: {settings.API_BASE_URL}")
-   #
-    client = UserClient()
-    result = client.login()
-    result=client.getcode(username=os.getenv("USER_CODE"))
-    client.urlcheck()
- #   print(result)
+    """运行所有监控检查"""
+    monitor = APIMonitor()
+    monitor.run_all_checks()
+    # monitor._print_summary()
+
 
 if __name__ == "__main__":
     main()
+
+    # 如果需要运行自定义检查，取消下面的注释
+    # custom_check_example()
