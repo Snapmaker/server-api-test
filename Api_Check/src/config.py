@@ -15,14 +15,15 @@ class Settings(BaseSettings):
 
     # ============================================
     # ============================================
-    CLIENT_ID: str = ""
-    CLIENT_SECRET: str = ""
-    USER: str = ""
-    PAW: str = ""
-    CN_USER: str = ""
-    CN_PAW: str = ""
-    DEVICE_SECRET_REGISTER_URL: str = ""   # 密钥注册激活接口
-    DEVICE_SECRET_CHECK_URL: str = ""   # 密钥签名校验接口
+
+    CLIENT_ID: str
+    CLIENT_SECRET: str
+    USER: str
+    PAW: str
+    CN_USER: str
+    CN_PAW: str
+    DEVICE_SECRET_REGISTER_URL: str   # 密钥注册激活接口
+    DEVICE_SECRET_CHECK_URL: str   # 密钥签名校验接口
 
     # ============================================
     # 设备认证配置（可选，从环境变量读取）
