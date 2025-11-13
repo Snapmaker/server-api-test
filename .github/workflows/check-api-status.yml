@@ -47,7 +47,3 @@ jobs:
         DEVICE_SECRET_REGISTER_URL: ${{ secrets.DEVICE_SECRET_REGISTER_URL }}
         DEVICE_SECRET_CHECK_URL: ${{ secrets.DEVICE_SECRET_CHECK_URL }}
 
-        # 可选配置
-        REQUEST_TIMEOUT: ${{ secrets.REQUEST_TIMEOUT }}
-        FEISHU_API: ${{ secrets.FEISHU_API }}
-        USER_CODE: ${{ secrets.USER_CODE }}
