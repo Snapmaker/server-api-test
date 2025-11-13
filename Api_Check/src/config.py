@@ -30,14 +30,14 @@ class Settings(BaseSettings):
     DEVICE_PRIVATE_KEY: str = ""  # 设备私钥（Base64 编码的 DER 格式）
     DEVICE_PUBLIC_KEY: str = ""  # 设备公钥（Base64 编码的 DER 格式，用于签名自校验）
     PRODUCT_CODE: str = "U1"  # 产品代码（用于密钥注册激活）
-    DEVICE_SECRET_REGISTER_URL: str = "https://n8n.kuaizao.org/webhook/device/secret/register"  # 密钥注册激活接口
-    DEVICE_SECRET_CHECK_URL: str = "https://n8n.kuaizao.org/webhook/device/secret/check"  # 密钥签名校验接口
+    DEVICE_SECRET_REGISTER_URL: str  # 密钥注册激活接口
+    DEVICE_SECRET_CHECK_URL: str   # 密钥签名校验接口
 
     # ============================================
     # 其他配置
     # ============================================
     REQUEST_TIMEOUT: int = 30
-    FEISHU_API: str = "https://open.feishu.cn/open-apis/bot/v2/hook/f97c7ac6-6a24-48e6-af1e-4a1faad95c09"  # 飞书 Webhook，不配置则不发送通知
+    FEISHU_API: str  # 飞书 Webhook，不配置则不发送通知
 
     class Config:
         env_file = ".env"
