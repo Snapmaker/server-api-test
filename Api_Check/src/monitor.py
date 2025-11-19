@@ -938,6 +938,7 @@ class APIMonitor:
         # 执行各项检查
         print("\n[1] 检查登录服务...")
         self.check_login("国际登录服务", "intl")
+        self.check_login("国内登录服务","cn")
 
 
         print("\n[2] 检查验证码服务...")
