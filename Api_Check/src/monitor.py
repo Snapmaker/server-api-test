@@ -24,7 +24,7 @@ class APIMonitor:
 
     def __init__(self):
         self.base_url = settings.API_BASE_URL.rstrip('/')
-        self.cn_base_url = settings.API_BASE_URL.rstrip('/')
+        self.cn_base_url = settings.API_CN_BASE_URL.rstrip('/')
         self.timeout = settings.REQUEST_TIMEOUT
         self.config = MONITOR_CONFIG
         self.results = []  # 存储所有检查结果
@@ -561,7 +561,7 @@ class APIMonitor:
             if resp_json.get('code') == 200:
                 if logger:
                     logger.info(f"成功获取Token，HTTP状态码: {response.status_code}")
-                print("✓ 设备Token认证成功")
+                print(f"✓ 设备Token认证成功 {url}")
                 print(f"  Access Token: {resp_json.get('data', {}).get('access_token', 'N/A')[:50]}...")
                 return True
             else:
