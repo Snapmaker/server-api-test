@@ -483,7 +483,7 @@ class APIMonitor:
             self._send_feishu_notification(self._format_error_notification(check_name, error_info))
             return False
 
-    def device_token_auth(self) -> bool:
+    def device_token_auth(self,url) -> bool:
         """设备 Token 认证（向 OAuth2 端点请求设备 token）"""
         check_name = "设备Token认证"
 
@@ -509,7 +509,8 @@ class APIMonitor:
             start_time = time.time()
 
             # 构建请求参数
-            url = f"{self.base_url}{self.config['endpoints']['login']}"
+            url = url
+
             params = {
                 "grant_type": "snapmaker_device",
                 "sign": self.ecc_sign,
@@ -845,7 +846,9 @@ class APIMonitor:
 
             # 5. 设备 Token 认证
             print("  开始设备Token认证...")
-            if not self.device_token_auth():
+            url=f"{self.base_url}{self.config['endpoints']['login']}"
+            url_cn = f"{self.cn_base_url}{self.config['endpoints']['login']}"
+            if not self.device_token_auth(url) or not self.device_token_auth(url_cn):
                 raise Exception("设备Token认证失败")
 
             duration = time.time() - start_time
