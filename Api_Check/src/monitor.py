@@ -646,6 +646,35 @@ class APIMonitor:
         except Exception as e:
             print(f"✗ 飞书通知发送失败: {e}")
 
+    def send_keepalive_notification(self):
+        """发送保活通知（每天定时发送，证明服务正常运行）"""
+        if not settings.FEISHU_API:
+            print("⚠ 未配置飞书 Webhook，无法发送保活消息")
+            return False
+
+        try:
+            current_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            message = (
+                f"🟢 API监控服务保活通知\n"
+                f"- 服务状态: 正常运行中\n"
+                f"- 当前时间: {current_time}\n"
+                f"- 监控地址: {self.base_url}\n"
+                f"- 检测区域: {settings.CHECK_REGION}\n"
+                f"✅ 系统运行正常，持续为您服务"
+            )
+
+            requests.post(
+                url=settings.FEISHU_API,
+                json={"msg_type": "text", "content": {"text": message}},
+                timeout=10,
+                verify=False
+            )
+            print("✓ 保活通知已发送")
+            return True
+        except Exception as e:
+            print(f"✗ 保活通知发送失败: {e}")
+            return False
+
     def _format_error_notification(self, check_name: str, error_info: Dict) -> str:
         """格式化错误通知消息"""
         notification = (
