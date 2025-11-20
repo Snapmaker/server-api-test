@@ -1,0 +1,54 @@
+name: API 监控检查
+
+on:
+  push:
+    branches: ["main"]
+  schedule:
+    - cron: '*/30 * * * *'  # 每 10 分钟运行一次
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    env:
+      # 认证凭证（必需）
+      CLIENT_ID: ${{ secrets.CLIENT_ID }}
+      CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+      USER: ${{ secrets.USER }}
+      PAW: ${{ secrets.PAW }}
+      CN_USER: ${{ secrets.CN_USER }}
+      CN_PAW: ${{ secrets.CN_PAW }}
+      DEVICE_SECRET_REGISTER_URL: ${{ secrets.DEVICE_SECRET_REGISTER_URL }}
+      DEVICE_SECRET_CHECK_URL: ${{ secrets.DEVICE_SECRET_CHECK_URL }}
+
+      # 设备认证配置（可选）
+      DEVICE_SN: ${{ secrets.DEVICE_SN || 'SN12345' }}
+      DEVICE_PRIVATE_KEY: ${{ secrets.DEVICE_PRIVATE_KEY || '' }}
+      DEVICE_PUBLIC_KEY: ${{ secrets.DEVICE_PUBLIC_KEY || '' }}
+      PRODUCT_CODE: ${{ secrets.PRODUCT_CODE || 'U1' }}
+
+      # 可选配置
+      REQUEST_TIMEOUT: ${{ secrets.REQUEST_TIMEOUT || '30' }}
+      FEISHU_API: ${{ secrets.FEISHU_API || '' }}
+      USER_CODE: ${{ secrets.USER_CODE || '' }}
+
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+
+    - name: 设置 Python 3.12
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.12"
+
+    - name: 安装依赖
+      run: |
+        python -m pip install --upgrade pip
+        cd Api_Check
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+    - name: 运行 API 监控检查
+      run: |
+        cd Api_Check
+        python main.py
+
