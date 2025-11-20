@@ -848,7 +848,16 @@ class APIMonitor:
             print("  开始设备Token认证...")
             url=f"{self.base_url}{self.config['endpoints']['login']}"
             url_cn = f"{self.cn_base_url}{self.config['endpoints']['login']}"
-            if not self.device_token_auth(url) or not self.device_token_auth(url_cn):
+            check_region = settings.CHECK_REGION.lower()
+
+            auth_failed = False
+            if check_region in ["intl", "both"]:
+                if not self.device_token_auth(url):
+                    auth_failed = True
+            if check_region in ["cn", "both"]:
+                if not self.device_token_auth(url_cn):
+                    auth_failed = True
+            if auth_failed:
                 raise Exception("设备Token认证失败")
 
             duration = time.time() - start_time
@@ -937,8 +946,11 @@ class APIMonitor:
 
         # 执行各项检查
         print("\n[1] 检查登录服务...")
-        self.check_login("国际登录服务", "intl")
-        self.check_login("国内登录服务","cn")
+        check_region = settings.CHECK_REGION.lower()
+        if check_region in ["intl", "both"]:
+            self.check_login("国际登录服务", "intl")
+        if check_region in ["cn", "both"]:
+            self.check_login("国内登录服务","cn")
 
 
         print("\n[2] 检查验证码服务...")

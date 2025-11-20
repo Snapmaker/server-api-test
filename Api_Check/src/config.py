@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     # ============================================
     REQUEST_TIMEOUT: int = 30
     FEISHU_API: str  # 飞书 Webhook，不配置则不发送通知
+    CHECK_REGION: str = "both"  # 检测区域配置：cn(仅国内), intl(仅海外), both(两者都检测)
 
 
     class Config:
