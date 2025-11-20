@@ -2,7 +2,7 @@ name: API 监控检查
 
 on:
   push:
-    branches: ["main"]
+    branches: ["master"]
   schedule:
     - cron: '*/30 * * * *'  # 每 30 分钟运行一次
     - cron: '0 2 * * *'     # 每天上午10点运行保活检查 (UTC+8转换为UTC时间)
