@@ -787,15 +787,15 @@ class APIMonitor:
             self._send_feishu_notification(self._format_error_notification(check_name, error_info))
             return False
 
-    def _send_feishu_notification(self, message: str):
+    def _send_feishu_notification(self, message: str,feishu_url=settings.FEISHU_API):
         """发送飞书通知"""
-        if not settings.FEISHU_API:
+        if not feishu_url:
             print("⚠ 未配置飞书 Webhook，跳过通知")
             return
 
         try:
             requests.post(
-                url=settings.FEISHU_API,
+                url=feishu_url,
                 json={"msg_type": "text", "content": {"text": message}},
                 timeout=10,
                 verify=False
@@ -1225,7 +1225,7 @@ class APIMonitor:
                                f"发现 {error_count} 个错误，{warning_count} 个警告 (耗时 {duration:.2f}秒)")
                 # 发送通知
                 self._send_feishu_notification(
-                    self._format_cert_notification(results, "error")
+                    self._format_cert_notification(results, "error"),feishu_url=settings.FEISHU_CERT_API
                 )
                 return False
             elif warning_count > 0:
@@ -1233,7 +1233,7 @@ class APIMonitor:
                                f"发现 {warning_count} 个警告 (耗时 {duration:.2f}秒)")
                 # 发送警告通知
                 self._send_feishu_notification(
-                    self._format_cert_notification(results, "warning")
+                    self._format_cert_notification(results, "warning"),feishu_url=settings.FEISHU_CERT_API
                 )
                 return True
             else:
@@ -1339,16 +1339,6 @@ class APIMonitor:
 
         print("\n[4] 检查健康检查 URL...")
         self.check_health_urls()
-
-        # 新增：证书检查（独立容错）
-        if settings.CERT_CHECK_ENABLED:
-            try:
-                print("\n[5] 检查 SSL 证书状态...")
-                self.check_certificates()
-            except Exception as e:
-                print(f"✗ 证书检查出错: {e}")
-                print("  其他检查将继续进行...")
-                # 不影响后续流程
 
         # 输出总结
         self._print_summary()

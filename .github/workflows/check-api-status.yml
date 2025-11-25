@@ -31,8 +31,60 @@ jobs:
       # 可选配置
       REQUEST_TIMEOUT: ${{ secrets.REQUEST_TIMEOUT || '30' }}
       FEISHU_API: ${{ secrets.FEISHU_API || '' }}
+      FEISHU_CERT_API: ${{ secrets.FEISHU_CERT_API || '' }}
       USER_CODE: ${{ secrets.USER_CODE || '' }}
       CHECK_REGION: ${{ secrets.CHECK_REGION || 'both' }}  # 检测区域：cn(仅国内), intl(仅海外), both(两者都检测)
+
+      # SSL 证书配置
+      ENABLE_SSL_VERIFY: ${{ secrets.ENABLE_SSL_VERIFY || 'true' }}
+
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+
+    - name: 设置 Python 3.12
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.12"
+
+    - name: 安装依赖
+      run: |
+        python -m pip install --upgrade pip
+        cd Api_Check
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+    - name: 运行 API 监控检查
+      run: |
+        cd Api_Check
+        python main.py
+
+  cert-check:
+    runs-on: ubuntu-latest
+    # 每天上午10点运行证书检查 (UTC+8转换为UTC时间: 10:00 - 8 = 02:00)
+    if: github.event.schedule == '0 2 * * *' || github.event_name == 'workflow_dispatch'
+    env:
+      # 认证凭证（必需）
+      CLIENT_ID: ${{ secrets.CLIENT_ID }}
+      CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+      USER: ${{ secrets.USER }}
+      PAW: ${{ secrets.PAW }}
+      CN_USER: ${{ secrets.CN_USER }}
+      CN_PAW: ${{ secrets.CN_PAW }}
+      DEVICE_SECRET_REGISTER_URL: ${{ secrets.DEVICE_SECRET_REGISTER_URL }}
+      DEVICE_SECRET_CHECK_URL: ${{ secrets.DEVICE_SECRET_CHECK_URL }}
+
+      # 设备认证配置（可选）
+      DEVICE_SN: ${{ secrets.DEVICE_SN || 'SN12345' }}
+      DEVICE_PRIVATE_KEY: ${{ secrets.DEVICE_PRIVATE_KEY || '' }}
+      DEVICE_PUBLIC_KEY: ${{ secrets.DEVICE_PUBLIC_KEY || '' }}
+      PRODUCT_CODE: ${{ secrets.PRODUCT_CODE || 'U1' }}
+
+      # 可选配置
+      REQUEST_TIMEOUT: ${{ secrets.REQUEST_TIMEOUT || '30' }}
+      FEISHU_API: ${{ secrets.FEISHU_API || '' }}
+      FEISHU_CERT_API: ${{ secrets.FEISHU_CERT_API || '' }}
+      USER_CODE: ${{ secrets.USER_CODE || '' }}
+      CHECK_REGION: ${{ secrets.CHECK_REGION || 'both' }}
 
       # SSL 证书配置
       ENABLE_SSL_VERIFY: ${{ secrets.ENABLE_SSL_VERIFY || 'true' }}
@@ -55,10 +107,17 @@ jobs:
         cd Api_Check
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-    - name: 运行 API 监控检查
+    - name: 运行证书检查
       run: |
         cd Api_Check
-        python main.py
+        python cert_check.py
+
+    - name: 确认证书检查完成
+      if: always()
+      run: |
+        echo "✅ 证书检查完成"
+        echo "📅 执行时间: $(date)"
+        echo "🔄 下次运行: 明天上午10点"
 
   keepalive:
     runs-on: ubuntu-latest
@@ -84,14 +143,9 @@ jobs:
       # 可选配置
       REQUEST_TIMEOUT: ${{ secrets.REQUEST_TIMEOUT || '30' }}
       FEISHU_API: ${{ secrets.FEISHU_API || '' }}
+      FEISHU_CERT_API: ${{ secrets.FEISHU_CERT_API || '' }}
       USER_CODE: ${{ secrets.USER_CODE || '' }}
       CHECK_REGION: ${{ secrets.CHECK_REGION || 'both' }}
-
-      # SSL 证书配置
-      ENABLE_SSL_VERIFY: ${{ secrets.ENABLE_SSL_VERIFY || 'true' }}
-      SSL_CERT_PATH: ${{ secrets.SSL_CERT_PATH || '' }}
-      CERT_CHECK_ENABLED: ${{ secrets.CERT_CHECK_ENABLED || 'true' }}
-      CERT_EXPIRY_WARNING_DAYS: ${{ secrets.CERT_EXPIRY_WARNING_DAYS || '15' }}
 
     steps:
     - name: 检出代码
