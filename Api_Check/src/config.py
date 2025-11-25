@@ -70,7 +70,8 @@ MONITOR_CONFIG = {
         "https://www.snapmaker.com/en-US",
         "https://www.snapmaker.cn",
         "https://wiki.snapmaker.com",
-        "https://forum.snapmaker.com"
+        "https://forum.snapmaker.com",
+        "https://public.resource.snapmaker.cn/test/user_icon.svg"
 
     ],
 
@@ -80,3 +81,4 @@ MONITOR_CONFIG = {
         "retry_delay": 2  # 秒
     }
 }
+
