@@ -81,7 +81,7 @@ MONITOR_CONFIG = {
         "https://wiki.snapmaker.com",
         "https://forum.snapmaker.com",
         "https://public.resource.snapmaker.cn/test/user_icon.svg",
-        "https://id.snapamker.cn",
+        "https://id.snapmaker.cn",
         "https://wiki.snapmaker.cn",
         "https://account.snapmaker.com"
     ],
@@ -97,4 +97,5 @@ MONITOR_CONFIG = {
         "timeout": 10,  # 单个证书检查超时（秒）
     }
 }
+
 
