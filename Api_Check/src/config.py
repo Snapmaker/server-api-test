@@ -37,7 +37,8 @@ class Settings(BaseSettings):
     # 其他配置
     # ============================================
     REQUEST_TIMEOUT: int = 30
-    FEISHU_API: str  # 飞书 Webhook，不配置则不发送通知
+    FEISHU_API: str # 飞书 Webhook，不配置则不发送通知
+    FEISHU_CERT_API: str #飞书的证书机器人通知
     CHECK_REGION: str = "both"  # 检测区域配置：cn(仅国内), intl(仅海外), both(两者都检测)
 
     # ============================================
@@ -79,8 +80,10 @@ MONITOR_CONFIG = {
         "https://www.snapmaker.cn",
         "https://wiki.snapmaker.com",
         "https://forum.snapmaker.com",
-        "https://public.resource.snapmaker.cn/test/user_icon.svg"
-
+        "https://public.resource.snapmaker.cn/test/user_icon.svg",
+        "https://id.snapamker.cn",
+        "https://wiki.snapmaker.cn",
+        "https://account.snapmaker.com"
     ],
 
     # 重试配置
