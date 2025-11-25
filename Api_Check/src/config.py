@@ -40,6 +40,14 @@ class Settings(BaseSettings):
     FEISHU_API: str  # 飞书 Webhook，不配置则不发送通知
     CHECK_REGION: str = "both"  # 检测区域配置：cn(仅国内), intl(仅海外), both(两者都检测)
 
+    # ============================================
+    # SSL 证书配置
+    # ============================================
+    ENABLE_SSL_VERIFY: bool = True  # 是否启用 SSL 验证（默认启用）
+    SSL_CERT_PATH: str = ""  # 自定义 CA 证书路径（留空使用 certifi）
+    CERT_CHECK_ENABLED: bool = True  # 是否启用证书检查功能
+    CERT_EXPIRY_WARNING_DAYS: int = 15  # 证书过期提前告警天数
+
 
     class Config:
         env_file = ".env"
@@ -79,6 +87,11 @@ MONITOR_CONFIG = {
     "retry": {
         "max_retries": 3,
         "retry_delay": 2  # 秒
+    },
+
+    # 证书检查配置
+    "certificate": {
+        "timeout": 10,  # 单个证书检查超时（秒）
     }
 }
 

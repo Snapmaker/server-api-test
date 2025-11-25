@@ -8,6 +8,7 @@ import json
 from typing import Dict, Any, Optional
 from urllib.parse import urlencode
 from .config import settings, MONITOR_CONFIG
+from .cert_checker import CertificateChecker
 
 # ECC 签名相关
 try:
@@ -30,32 +31,76 @@ class APIMonitor:
         self.results = []  # 存储所有检查结果
         self.privatekey = None  # ECC 私钥
         self.publickey = None  # ECC 公钥
+        self.key_registration_status = None  # 密钥注册状态: None/pending/registered/failed
         self.sn = settings.DEVICE_SN  # 设备序列号
         self.product_code = settings.PRODUCT_CODE  # 产品代码
         self.ecc_sign = None  # ECC 签名
         self.params = None  # 签名参数
         self.nonce = None  # 随机数
 
+        # 初始化证书检查器
+        if settings.CERT_CHECK_ENABLED:
+            self.cert_checker = CertificateChecker(
+                warning_days=settings.CERT_EXPIRY_WARNING_DAYS,
+                timeout=self.config['certificate']['timeout']
+            )
+        else:
+            self.cert_checker = None
+
     # ==================== 辅助方法 ====================
+
+    def _get_verify_param(self):
+        """
+        获取 requests 的 verify 参数
+
+        根据配置返回合适的 SSL 验证参数:
+        - False: 禁用 SSL 验证（兼容自签名证书）
+        - True: 启用 SSL 验证（使用 certifi CA 证书包）
+        - str: 自定义 CA 证书路径
+
+        Returns:
+            verify 参数值
+        """
+        # 如果禁用 SSL 验证，直接返回 False
+        if not settings.ENABLE_SSL_VERIFY:
+            return False
+
+        # 如果配置了自定义 CA 证书路径，使用自定义证书
+        if settings.SSL_CERT_PATH:
+            import os
+            if os.path.exists(settings.SSL_CERT_PATH):
+                return settings.SSL_CERT_PATH
+            else:
+                print(f"⚠ 自定义 CA 证书不存在: {settings.SSL_CERT_PATH}")
+                print("  降级为使用默认 CA 证书")
+
+        # 尝试使用 certifi 提供的 CA 证书包
+        try:
+            import certifi
+            return certifi.where()
+        except ImportError:
+            print("⚠ certifi 库未安装，使用系统默认 CA 证书")
+            return True
 
     def _generate_basic_auth(self) -> str:
         """生成 Basic Auth"""
         credentials = f"{settings.CLIENT_ID}:{settings.CLIENT_SECRET}"
         return f"Basic {base64.b64encode(credentials.encode()).decode()}"
 
-    def _retry_request(self, func, *args, retry_on_status_codes=[500, 502, 503, 504], **kwargs):
+    def _retry_request(self, func, *args, retry_on_status_codes=[500, 502, 503, 504], max_retries_override=None, **kwargs):
         """
         重试请求辅助方法
 
         Args:
             func: 要执行的函数
             retry_on_status_codes: 需要重试的HTTP状态码列表
+            max_retries_override: 自定义最大重试次数（优先级高于配置文件）
             *args, **kwargs: 传递给func的参数
 
         Returns:
             函数执行结果和重试次数的元组 (result, retry_count)
         """
-        max_retries = self.config['retry']['max_retries']
+        max_retries = max_retries_override if max_retries_override is not None else self.config['retry']['max_retries']
         retry_delay = self.config['retry']['retry_delay']
 
         for attempt in range(max_retries):
@@ -90,6 +135,57 @@ class APIMonitor:
 
         # 理论上不应该到这里
         return None, max_retries
+
+    def _safe_json_parse(self, response, context: str = ""):
+        """
+        安全地解析JSON响应，并在失败时自动重试
+
+        Args:
+            response: requests.Response 对象
+            context: 上下文描述，用于日志记录（如 "密钥注册"）
+
+        Returns:
+            tuple: (json_data, error_info)
+                - 成功时: (parsed_json, None)
+                - 失败时: (None, error_dict)
+        """
+        max_json_retries = 2  # JSON解析失败额外重试次数
+        retry_delay = 1  # JSON解析重试延迟（秒）
+
+        for attempt in range(max_json_retries + 1):
+            try:
+                json_data = response.json()
+                if attempt > 0:
+                    print(f"  ✓ JSON解析在第{attempt + 1}次尝试后成功")
+                return json_data, None
+
+            except requests.exceptions.JSONDecodeError as e:
+                # 记录详细的JSON解析错误信息
+                error_detail = {
+                    "error": "JSONDecodeError",
+                    "message": str(e),
+                    "response_text": response.text[:500] if response.text else "(empty)",
+                    "content_type": response.headers.get('Content-Type', 'unknown'),
+                    "http_status": response.status_code,
+                    "context": context
+                }
+
+                if attempt < max_json_retries:
+                    # 还有重试机会，等待后重新发起请求
+                    print(f"  ⚠ JSON解析失败 ({context})，{retry_delay}秒后重试 ({attempt + 1}/{max_json_retries + 1})")
+                    print(f"    Content-Type: {error_detail['content_type']}")
+                    print(f"    响应内容预览: {error_detail['response_text'][:100]}...")
+                    time.sleep(retry_delay)
+                    continue
+                else:
+                    # 所有重试都失败
+                    print(f"  ✗ JSON解析失败 ({context})，已重试{max_json_retries}次")
+                    print(f"    HTTP状态码: {response.status_code}")
+                    print(f"    Content-Type: {error_detail['content_type']}")
+                    print(f"    响应内容: {error_detail['response_text']}")
+                    return None, error_detail
+
+        return None, {"error": "UnexpectedError", "message": "JSON解析重试逻辑异常"}
 
     def _generate_ecc_signature(self, sn: str, private_key_b64: str, public_key_b64: str = None) -> Dict[str, Any]:
         """
@@ -198,10 +294,12 @@ class APIMonitor:
             # Base64 编码
             self.privatekey = base64.b64encode(private_bytes).decode()
             self.publickey = base64.b64encode(public_bytes).decode()
+            self.key_registration_status = "pending"  # 新生成的密钥，待注册
 
             print("✓ ECC 密钥对生成成功")
             print(f"  SN: {self.sn}")
             print(f"  公钥: {self.publickey[:50]}...")
+            print(f"  注册状态: {self.key_registration_status}")
 
             # 使用 logger 记录日志（如果可用）
             if logger:
@@ -279,40 +377,63 @@ class APIMonitor:
 
             # 定义请求函数用于重试
             def make_request():
-                return requests.request(method="POST", url=url, json=data, timeout=self.timeout, verify=False)
+                return requests.request(method="POST", url=url, json=data, timeout=self.timeout, verify=self._get_verify_param())
 
-            # 使用重试机制
+            # 使用加强的重试机制（5次重试）
             print(f"  发送密钥注册请求: {url}")
-            response, retry_count = self._retry_request(make_request)
+            print(f"  ℹ 关键API - 使用加强重试策略（最多5次）")
+            response, retry_count = self._retry_request(make_request, max_retries_override=5)
             duration = time.time() - start_time
 
             if retry_count > 0:
                 print(f"  ℹ 经过 {retry_count} 次重试后成功")
 
-            rq_json = response.json()
+            # 使用安全JSON解析
+            rq_json, json_error = self._safe_json_parse(response, "密钥注册")
+
+            # 如果JSON解析失败
+            if json_error:
+                error_info = {
+                    "type": "ResponseParseError",
+                    "message": f"服务器返回了非JSON响应: {json_error.get('message', 'Unknown')}",
+                    "http_status": json_error.get('http_status', response.status_code),
+                    "response_body": json_error.get('response_text', ''),
+                    "content_type": json_error.get('content_type', 'unknown'),
+                    "url": url,
+                    "duration": duration,
+                    "retry_count": retry_count,
+                    "severity": "WARNING"  # 临时错误
+                }
+                self._send_feishu_notification(self._format_error_notification(check_name, error_info))
+                return False
 
             if rq_json.get('code') == 200:
+                self.key_registration_status = "registered"  # 标记为已注册
                 if logger:
                     logger.info("密钥注册成功")
                     logger.debug(f"设备sn: {self.sn}, 设备私钥：{self.privatekey}")
                 print("✓ 密钥注册成功")
+                print(f"  注册状态: {self.key_registration_status}")
                 return True
             else:
-                error_msg = rq_json.get('message', '未知错误')
+                self.key_registration_status = "failed"  # 标记为注册失败，保留密钥以便重试
+                error_msg = rq_json.get('message', rq_json.get('msg', '未知错误'))
                 error_code = rq_json.get('code', 'N/A')
                 if logger:
                     logger.info("密钥注册失败")
                     logger.info(rq_json)
                 print(f"✗ 密钥注册失败 [code: {error_code}]: {error_msg}")
+                print(f"  注册状态: {self.key_registration_status} (密钥已保留，下次运行将重试注册)")
                 error_info = {
                     "type": "BusinessError",
-                    "message": error_msg,
+                    "message": f"{error_msg} (密钥已保留，下次将重试)",
                     "http_status": response.status_code,
                     "error_code": error_code,
                     "response_body": rq_json,
                     "url": url,
                     "duration": duration,
-                    "retry_count": retry_count
+                    "retry_count": retry_count,
+                    "severity": "ERROR"  # 业务错误，需人工介入
                 }
                 self._send_feishu_notification(self._format_error_notification(check_name, error_info))
                 return False
@@ -411,17 +532,35 @@ class APIMonitor:
 
             # 定义请求函数用于重试
             def make_request():
-                return requests.request(method="POST", url=url, json=data, timeout=self.timeout, verify=False)
+                return requests.request(method="POST", url=url, json=data, timeout=self.timeout, verify=self._get_verify_param())
 
-            # 使用重试机制
+            # 使用加强的重试机制（5次重试）
             print(f"  发送签名校验请求: {url}")
-            response, retry_count = self._retry_request(make_request)
+            print(f"  ℹ 关键API - 使用加强重试策略（最多5次）")
+            response, retry_count = self._retry_request(make_request, max_retries_override=5)
             duration = time.time() - start_time
 
             if retry_count > 0:
                 print(f"  ℹ 经过 {retry_count} 次重试后成功")
 
-            rq_json = response.json()
+            # 使用安全JSON解析
+            rq_json, json_error = self._safe_json_parse(response, "签名校验")
+
+            # 如果JSON解析失败
+            if json_error:
+                error_info = {
+                    "type": "ResponseParseError",
+                    "message": f"服务器返回了非JSON响应: {json_error.get('message', 'Unknown')}",
+                    "http_status": json_error.get('http_status', response.status_code),
+                    "response_body": json_error.get('response_text', ''),
+                    "content_type": json_error.get('content_type', 'unknown'),
+                    "url": url,
+                    "duration": duration,
+                    "retry_count": retry_count,
+                    "severity": "WARNING"  # 临时错误
+                }
+                self._send_feishu_notification(self._format_error_notification(check_name, error_info))
+                return False
 
             if rq_json.get('code') == 200:
                 if logger:
@@ -429,7 +568,7 @@ class APIMonitor:
                 print("✓ 签名校验通过")
                 return True
             else:
-                error_msg = rq_json.get('message', '未知错误')
+                error_msg = rq_json.get('message', rq_json.get('msg', '未知错误'))
                 error_code = rq_json.get('code', 'N/A')
                 if logger:
                     logger.info("校验失败")
@@ -442,7 +581,8 @@ class APIMonitor:
                     "response_body": rq_json,
                     "url": url,
                     "duration": duration,
-                    "retry_count": retry_count
+                    "retry_count": retry_count,
+                    "severity": "ERROR"  # 业务错误，需人工介入
                 }
                 self._send_feishu_notification(self._format_error_notification(check_name, error_info))
                 return False
@@ -538,7 +678,7 @@ class APIMonitor:
                     data=params,
                     headers=headers,
                     timeout=self.timeout,
-                    verify=False
+                    verify=self._get_verify_param()
                 )
 
             # 使用重试机制
@@ -549,7 +689,24 @@ class APIMonitor:
             if retry_count > 0:
                 print(f"  ℹ 经过 {retry_count} 次重试后成功")
 
-            resp_json = response.json()
+            # 使用安全JSON解析
+            resp_json, json_error = self._safe_json_parse(response, "设备Token认证")
+
+            # 如果JSON解析失败
+            if json_error:
+                error_info = {
+                    "type": "ResponseParseError",
+                    "message": f"服务器返回了非JSON响应: {json_error.get('message', 'Unknown')}",
+                    "http_status": json_error.get('http_status', response.status_code),
+                    "response_body": json_error.get('response_text', ''),
+                    "content_type": json_error.get('content_type', 'unknown'),
+                    "url": url,
+                    "duration": duration,
+                    "retry_count": retry_count,
+                    "severity": "WARNING"  # 临时错误
+                }
+                self._send_feishu_notification(self._format_error_notification(check_name, error_info))
+                return False
 
             # print(f"  响应状态码: {response.status_code}")
             # print(f"  响应内容: {resp_json}")
@@ -578,7 +735,8 @@ class APIMonitor:
                     "response_body": resp_json,
                     "url": url,
                     "duration": duration,
-                    "retry_count": retry_count
+                    "retry_count": retry_count,
+                    "severity": "ERROR"  # 业务错误，需人工介入
                 }
                 self._send_feishu_notification(self._format_error_notification(check_name, error_info))
                 return False
@@ -677,8 +835,18 @@ class APIMonitor:
 
     def _format_error_notification(self, check_name: str, error_info: Dict) -> str:
         """格式化错误通知消息"""
+        # 根据严重级别设置告警图标
+        severity = error_info.get('severity', 'ERROR')
+        if severity == 'WARNING':
+            alert_icon = "⚠️"
+            severity_text = "警告 (临时错误，可能自动恢复)"
+        else:
+            alert_icon = "🔴"
+            severity_text = "错误 (需人工介入)"
+
         notification = (
-            f"⚠️ API 监控告警 ⚠️\n"
+            f"{alert_icon} API 监控告警 {alert_icon}\n"
+            f"- 严重级别: {severity_text}\n"
             f"- 检查项: {check_name}\n"
             f"- 错误类型: {error_info.get('type', 'Unknown')}\n"
             f"- 错误信息: {error_info.get('message', 'Unknown')}\n"
@@ -691,6 +859,10 @@ class APIMonitor:
         # 添加业务错误码（如果有）
         if 'error_code' in error_info:
             notification += f"- 业务错误码: {error_info['error_code']}\n"
+
+        # 添加Content-Type（如果有）
+        if 'content_type' in error_info:
+            notification += f"- Content-Type: {error_info['content_type']}\n"
 
         # 添加响应内容（如果有）
         if 'response_body' in error_info:
@@ -764,7 +936,7 @@ class APIMonitor:
                 url=full_url,
                 headers=headers,
                 timeout=self.timeout,
-                verify=False
+                verify=self._get_verify_param()
             )
             duration = time.time() - start_time
 
@@ -800,7 +972,7 @@ class APIMonitor:
                 url=url,
                 json={"account": account, "action": "oauth"},
                 timeout=self.timeout,
-                verify=False
+                verify=self._get_verify_param()
             )
             duration = time.time() - start_time
 
@@ -851,10 +1023,12 @@ class APIMonitor:
                 # 使用提供的密钥
                 self.privatekey = private_key
                 self.publickey = public_key
+                self.key_registration_status = "registered"  # 假设外部提供的密钥已注册
                 print("  使用提供的密钥对")
             elif self.privatekey and self.publickey:
                 # 使用实例变量中已有的密钥
                 print("  使用已生成的密钥对")
+                print(f"  当前注册状态: {self.key_registration_status}")
             else:
                 # 没有密钥，需要生成新的密钥对
                 print("  未找到密钥对，正在生成新的 ECC 密钥对...")
@@ -862,18 +1036,30 @@ class APIMonitor:
                     raise Exception("密钥对生成失败")
                 key_generated = True
 
-            # 3. 如果生成了新密钥，需要先注册激活
+            # 3. 检查密钥注册状态并决定是否需要注册
+            needs_registration = False
             if key_generated:
-                print("  检测到新生成的密钥，开始注册激活...")
-                if not self.ecc_action():
-                    raise Exception("密钥注册激活失败")
+                print("  检测到新生成的密钥，需要注册激活")
+                needs_registration = True
+            elif self.key_registration_status == "failed":
+                print("  检测到上次注册失败的密钥，将重试注册")
+                needs_registration = True
+            elif self.key_registration_status == "pending":
+                print("  检测到待注册的密钥，需要注册激活")
+                needs_registration = True
 
-            # 4. 调用 webhook 校验签名
+            # 4. 执行密钥注册
+            if needs_registration:
+                print("  开始密钥注册激活...")
+                if not self.ecc_action():
+                    raise Exception("密钥注册激活失败 (密钥已保留，可下次重试)")
+
+            # 5. 调用 webhook 校验签名
             print("  开始 webhook 签名校验...")
             if not self.chack_private_key():
                 raise Exception("Webhook 签名校验失败")
 
-            # 5. 设备 Token 认证
+            # 6. 设备 Token 认证
             print("  开始设备Token认证...")
             url=f"{self.base_url}{self.config['endpoints']['login']}"
             url_cn = f"{self.cn_base_url}{self.config['endpoints']['login']}"
@@ -914,7 +1100,7 @@ class APIMonitor:
         for attempt in range(max_retries):
             try:
                 start_time = time.time()
-                response = requests.get(url=url, timeout=self.timeout, verify=False)
+                response = requests.get(url=url, timeout=self.timeout, verify=self._get_verify_param())
                 duration = time.time() - start_time
 
                 response.raise_for_status()
@@ -959,6 +1145,166 @@ class APIMonitor:
 
         return success_count
 
+    def _collect_https_urls(self) -> list:
+        """
+        收集所有需要检查证书的 HTTPS URL
+
+        Returns:
+            HTTPS URL 列表（去重）
+        """
+        urls = set()
+
+        # 1. API 基础地址
+        if self.base_url.startswith('https://'):
+            urls.add(self.base_url)
+        if self.cn_base_url.startswith('https://'):
+            urls.add(self.cn_base_url)
+
+        # 2. 健康检查 URL
+        for url in self.config.get('health_check_urls', []):
+            if url.startswith('https://'):
+                urls.add(url)
+
+        # 3. 设备认证 URL
+        if settings.DEVICE_SECRET_REGISTER_URL.startswith('https://'):
+            urls.add(settings.DEVICE_SECRET_REGISTER_URL)
+        if settings.DEVICE_SECRET_CHECK_URL.startswith('https://'):
+            urls.add(settings.DEVICE_SECRET_CHECK_URL)
+
+        return sorted(list(urls))
+
+    def check_certificates(self) -> bool:
+        """
+        检查所有 HTTPS 端点的证书
+
+        Returns:
+            检查是否全部通过
+        """
+        check_name = "SSL证书检查"
+
+        if not self.cert_checker:
+            print("⚠ 证书检查功能已禁用（CERT_CHECK_ENABLED=False）")
+            return True
+
+        try:
+            start_time = time.time()
+
+            # 1. 收集所有 HTTPS URL
+            urls = self._collect_https_urls()
+            if not urls:
+                print("  未发现 HTTPS 端点，跳过证书检查")
+                return True
+
+            print(f"  检查 {len(urls)} 个 HTTPS 端点的证书...")
+
+            # 2. 逐一检查证书
+            results = []
+            for url in urls:
+                print(f"  检查: {url}")
+                result = self.cert_checker.check_certificate(url)
+                results.append(result)
+
+                # 实时输出结果
+                status_icon = {
+                    'ok': '✓',
+                    'warning': '⚠',
+                    'error': '✗'
+                }.get(result['status'], '?')
+                print(f"    {status_icon} {result.get('message', 'Unknown')}")
+
+            duration = time.time() - start_time
+
+            # 3. 统计结果
+            ok_count = sum(1 for r in results if r['status'] == 'ok')
+            warning_count = sum(1 for r in results if r['status'] == 'warning')
+            error_count = sum(1 for r in results if r['status'] == 'error')
+
+            # 4. 判断整体状态
+            if error_count > 0:
+                self._log_result(check_name, False,
+                               f"发现 {error_count} 个错误，{warning_count} 个警告 (耗时 {duration:.2f}秒)")
+                # 发送通知
+                self._send_feishu_notification(
+                    self._format_cert_notification(results, "error")
+                )
+                return False
+            elif warning_count > 0:
+                self._log_result(check_name, True,
+                               f"发现 {warning_count} 个警告 (耗时 {duration:.2f}秒)")
+                # 发送警告通知
+                self._send_feishu_notification(
+                    self._format_cert_notification(results, "warning")
+                )
+                return True
+            else:
+                self._log_result(check_name, True,
+                               f"所有证书正常 (耗时 {duration:.2f}秒)")
+                return True
+
+        except Exception as e:
+            error_info = {
+                "type": e.__class__.__name__,
+                "message": f"证书检查过程出错: {e}",
+                "url": "N/A",
+                "duration": 0
+            }
+            self._log_result(check_name, False, str(e))
+            self._send_feishu_notification(
+                self._format_error_notification(check_name, error_info)
+            )
+            return False
+
+    def _format_cert_notification(self, results: list, level: str = "warning") -> str:
+        """
+        格式化证书检查通知消息
+
+        Args:
+            results: 证书检查结果列表
+            level: 通知级别 (warning/error)
+
+        Returns:
+            格式化的飞书通知消息
+        """
+        # 统计
+        ok_count = sum(1 for r in results if r['status'] == 'ok')
+        warning_count = sum(1 for r in results if r['status'] == 'warning')
+        error_count = sum(1 for r in results if r['status'] == 'error')
+
+        # 图标
+        icon = "🔴" if level == "error" else "⚠️"
+
+        # 构建消息
+        message = f"{icon} SSL 证书检查报告\n"
+        message += f"- 检查时间: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+        message += f"- 检查端点数: {len(results)}\n"
+        message += f"- 正常: {ok_count}\n"
+        message += f"- 警告: {warning_count}\n"
+        message += f"- 错误: {error_count}\n\n"
+
+        # 错误项详情
+        if error_count > 0:
+            message += "🔴 错误项:\n"
+            for r in results:
+                if r['status'] == 'error':
+                    message += f"- {r['url']}\n"
+                    message += f"  {r.get('message', 'Unknown error')}\n"
+            message += "\n"
+
+        # 警告项详情
+        if warning_count > 0:
+            message += "⚠️ 警告项:\n"
+            for r in results:
+                if r['status'] == 'warning':
+                    message += f"- {r['url']}\n"
+                    message += f"  {r.get('message', 'Unknown warning')}\n"
+                    if 'valid_until' in r:
+                        message += f"  过期时间: {r['valid_until']}\n"
+                    if 'issuer' in r:
+                        message += f"  颁发者: {r['issuer']}\n"
+            message += "\n"
+
+        return message
+
     # ==================== 主要方法 ====================
 
     def run_all_checks(self):
@@ -968,6 +1314,7 @@ class APIMonitor:
         print("=" * 60)
         print(f"开始时间: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         print(f"API 地址: {self.base_url}")
+        print(f"SSL 验证: {'已启用' if settings.ENABLE_SSL_VERIFY else '已禁用'}")
         print("=" * 60)
 
         # 清空之前的结果
@@ -992,6 +1339,16 @@ class APIMonitor:
 
         print("\n[4] 检查健康检查 URL...")
         self.check_health_urls()
+
+        # 新增：证书检查（独立容错）
+        if settings.CERT_CHECK_ENABLED:
+            try:
+                print("\n[5] 检查 SSL 证书状态...")
+                self.check_certificates()
+            except Exception as e:
+                print(f"✗ 证书检查出错: {e}")
+                print("  其他检查将继续进行...")
+                # 不影响后续流程
 
         # 输出总结
         self._print_summary()
@@ -1035,7 +1392,7 @@ class APIMonitor:
                 method=method,
                 url=check_url,
                 timeout=self.timeout,
-                verify=False,
+                verify=self._get_verify_param(),
                 **kwargs
             )
             duration = time.time() - start_time

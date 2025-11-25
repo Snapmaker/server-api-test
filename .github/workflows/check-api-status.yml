@@ -34,6 +34,12 @@ jobs:
       USER_CODE: ${{ secrets.USER_CODE || '' }}
       CHECK_REGION: ${{ secrets.CHECK_REGION || 'both' }}  # 检测区域：cn(仅国内), intl(仅海外), both(两者都检测)
 
+      # SSL 证书配置
+      ENABLE_SSL_VERIFY: ${{ secrets.ENABLE_SSL_VERIFY || 'true' }}
+      SSL_CERT_PATH: ${{ secrets.SSL_CERT_PATH || '' }}
+      CERT_CHECK_ENABLED: ${{ secrets.CERT_CHECK_ENABLED || 'true' }}
+      CERT_EXPIRY_WARNING_DAYS: ${{ secrets.CERT_EXPIRY_WARNING_DAYS || '15' }}
+
     steps:
     - name: 检出代码
       uses: actions/checkout@v4
@@ -80,6 +86,12 @@ jobs:
       FEISHU_API: ${{ secrets.FEISHU_API || '' }}
       USER_CODE: ${{ secrets.USER_CODE || '' }}
       CHECK_REGION: ${{ secrets.CHECK_REGION || 'both' }}
+
+      # SSL 证书配置
+      ENABLE_SSL_VERIFY: ${{ secrets.ENABLE_SSL_VERIFY || 'true' }}
+      SSL_CERT_PATH: ${{ secrets.SSL_CERT_PATH || '' }}
+      CERT_CHECK_ENABLED: ${{ secrets.CERT_CHECK_ENABLED || 'true' }}
+      CERT_EXPIRY_WARNING_DAYS: ${{ secrets.CERT_EXPIRY_WARNING_DAYS || '15' }}
 
     steps:
     - name: 检出代码
