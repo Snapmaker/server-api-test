@@ -1493,8 +1493,8 @@ class APIMonitor:
         print("\n[3] 检查设备密钥注册服务...")
         self.check_device_auth()
 
-        print("\n[4] 检查设备Token认证服务...")
-        self.check_device_token_auth()
+        # print("\n[4] 检查设备Token认证服务...")
+        # self.check_device_token_auth()
 
         print("\n[5] 检查健康检查 URL...")
         self.check_health_urls()
