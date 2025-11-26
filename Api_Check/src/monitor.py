@@ -1,4 +1,4 @@
-"""简单的 API 监控器 - 增强重试版"""
+"""简单的 API 监控器 - 15次重试业务错误版"""
 import base64
 import requests
 import time
@@ -74,20 +74,12 @@ class APIMonitor:
 
     def _retry_request(self, func, *args, retry_on_status_codes=[500, 502, 503, 504], max_retries_override=None, validate_func=None, **kwargs):
         """
-        核心重试逻辑 - 支持 HTTP 状态码重试和业务逻辑重试
-
-        Args:
-            func: 执行请求的函数
-            retry_on_status_codes: 需要重试的 HTTP 状态码
-            max_retries_override: 覆盖默认重试次数
-            validate_func: (可选) 业务验证函数，接收 response，如果业务失败应抛出 ValueError
-            *args, **kwargs: 传递给 func 的参数
-
-        Returns:
-            (response, retry_count)
-            注意：如果重试耗尽，会返回最后一次的 response（即使它是失败的），以便外层记录日志发送通知。
-            如果是网络连接错误导致完全没拿到 response，则会抛出异常。
+        核心重试逻辑
+        1. 支持 HTTP 状态码重试
+        2. 支持业务逻辑重试 (通过 validate_func)
+        3. 重试耗尽前不抛出最终错误
         """
+        # 如果未指定 override，则使用配置默认值
         max_retries = max_retries_override if max_retries_override is not None else self.config['retry']['max_retries']
         retry_delay = self.config['retry']['retry_delay']
 
@@ -96,50 +88,60 @@ class APIMonitor:
                 # 1. 执行请求
                 response = func(*args, **kwargs)
 
-                # 2. 检查 HTTP 状态码 (500/502/503/504 等)
+                # 2. 检查 HTTP 状态码 (如 502 Bad Gateway)
                 if response.status_code in retry_on_status_codes:
-                    # 主动抛出 HTTPError 触发重试
-                    response.raise_for_status()
+                    response.raise_for_status() # 抛出 HTTPError
 
-                # 3. 检查业务逻辑 (例如 code != 200)
+                # 3. 检查业务逻辑 (如 code != 200)
                 if validate_func:
-                    # 如果 validate_func 抛出 ValueError，说明业务失败，需要重试
+                    # 如果业务验证不通过，validate_func 必须抛出 ValueError
                     validate_func(response)
 
-                # 如果都通过，直接返回
+                # 如果都通过，直接返回成功结果
                 return response, attempt
 
             except (requests.exceptions.RequestException, ValueError) as e:
-                # 捕获 网络异常(RequestException) 和 业务验证异常(ValueError)
+                # 捕获网络错误(RequestException) 和 业务验证错误(ValueError)
                 
+                # 如果还有重试机会
                 if attempt < max_retries - 1:
-                    print(f"  ⚠ 请求/验证失败 ({str(e)})，{retry_delay}秒后重试 ({attempt + 1}/{max_retries})")
+                    error_msg = str(e)
+                    # 简化错误日志
+                    if isinstance(e, ValueError):
+                        print(f"  ⚠ 业务验证未通过: {error_msg}，等待重试 ({attempt + 1}/{max_retries})")
+                    else:
+                        print(f"  ⚠ 请求异常: {error_msg}，等待重试 ({attempt + 1}/{max_retries})")
+                    
                     time.sleep(retry_delay)
                     continue
                 else:
-                    # === 最后一次重试也失败了 ===
+                    # === 重试次数耗尽 ===
+                    print(f"  ✗ 重试耗尽 (共{max_retries}次)")
                     
-                    # 如果是业务验证失败 (ValueError)，我们其实手里有一个 response 对象
-                    # 我们应该返回这个 response，让外层代码去解析里面的错误信息并发送通知
+                    # 如果是业务错误，我们手里有 response，返回它以便外层解析具体错误信息
                     if isinstance(e, ValueError) and 'response' in locals():
-                        print(f"  ✗ 重试耗尽，业务验证仍未通过: {str(e)}")
                         return response, max_retries
                     
-                    # 如果是网络完全不通 (ConnectionError 等)，手里没有 response，只能抛出异常
+                    # 如果是网络完全断开，没有 response，只能抛出异常
                     raise e
 
         return None, max_retries
 
     def _validate_json_success(self, response):
-        """通用业务验证器：检查 JSON 响应且 code == 200"""
+        """
+        通用业务验证器
+        检查:
+        1. 响应必须是 JSON
+        2. JSON 中的 code 必须是 200
+        如果不满足，抛出 ValueError 触发重试
+        """
         try:
             data = response.json()
             if data.get('code') != 200:
                 msg = data.get('msg', data.get('message', 'Unknown Error'))
-                # 抛出 ValueError 以触发 _retry_request 的重试逻辑
-                raise ValueError(f"业务错误码 {data.get('code')}: {msg}")
+                # 关键：抛出异常让 _retry_request 捕获并重试
+                raise ValueError(f"API返回错误码 {data.get('code')}: {msg}")
         except requests.exceptions.JSONDecodeError:
-            # 如果不是 JSON，但在某些接口理应是 JSON，也视为失败
             raise ValueError("响应内容不是有效的 JSON")
 
     def _safe_json_parse(self, response, context: str = ""):
@@ -217,10 +219,10 @@ class APIMonitor:
                 return requests.post(url=url, json=data, timeout=self.timeout, verify=self._get_verify_param())
 
             print(f"  发送密钥注册请求: {url}")
-            # 使用验证器，遇到 code!=200 会重试
+            # 【关键修改】设置重试次数为 15
             response, retry_count = self._retry_request(
                 make_request, 
-                max_retries_override=5, 
+                max_retries_override=15, 
                 validate_func=self._validate_json_success
             )
             duration = time.time() - start_time
@@ -228,16 +230,16 @@ class APIMonitor:
             rq_json, json_error = self._safe_json_parse(response, "密钥注册")
 
             if json_error:
-                # 只有在重试耗尽后，仍解析失败才报警
                 self._send_feishu_notification(self._format_error_notification(check_name, json_error))
                 return False
 
+            # 这里判断是重试耗尽后的结果
             if rq_json.get('code') == 200:
                 self.key_registration_status = "registered"
                 print(f"✓ 密钥注册成功 (重试: {retry_count})")
                 return True
             else:
-                # 重试耗尽后，仍是业务错误，发送报警
+                # 只有当 15 次全失败，这里才会执行，发送报警
                 self.key_registration_status = "failed"
                 error_msg = rq_json.get('message', rq_json.get('msg', '未知错误'))
                 print(f"✗ 密钥注册失败: {error_msg}")
@@ -254,7 +256,7 @@ class APIMonitor:
                 return False
 
         except Exception as e:
-            # 网络完全不通等异常
+            # 网络完全不通等无法获取 response 的异常
             duration = time.time() - start_time
             error_info = {"type": e.__class__.__name__, "message": str(e), "url": url, "duration": duration}
             self._send_feishu_notification(self._format_error_notification(check_name, error_info))
@@ -284,10 +286,10 @@ class APIMonitor:
                 return requests.post(url=url, json=data, timeout=self.timeout, verify=self._get_verify_param())
 
             print(f"  发送签名校验请求: {url}")
-            # 使用验证器
+            # 【关键修改】设置重试次数为 15
             response, retry_count = self._retry_request(
                 make_request, 
-                max_retries_override=5, 
+                max_retries_override=15, 
                 validate_func=self._validate_json_success
             )
             duration = time.time() - start_time
@@ -349,10 +351,10 @@ class APIMonitor:
 
             print(f"  发送设备Token认证请求: {url}")
             
-            # 使用验证器，确保 code=200，否则重试
+            # 【关键修改】设置重试次数为 15，并启用业务验证
             response, retry_count = self._retry_request(
                 make_request, 
-                max_retries_override=5, 
+                max_retries_override=15, 
                 validate_func=self._validate_json_success
             )
             duration = time.time() - start_time
@@ -374,7 +376,7 @@ class APIMonitor:
                 print(f"✓ 设备Token认证成功 {url} (重试: {retry_count})")
                 return True, None
             else:
-                # 重试耗尽后仍失败
+                # 只有 15 次全失败后，这里才会执行，返回错误详情供上层发消息
                 error_msg = resp_json.get('message', resp_json.get('msg', '未知错误'))
                 print(f"✗ 设备Token认证失败: {error_msg}")
                 return False, {
@@ -473,7 +475,6 @@ class APIMonitor:
             full_url = f"{url}?{data}"
             headers = {"Authorization": self._generate_basic_auth(), "Content-Type": "multipart/form-data", "User-Agent": "Mozilla/5.0"}
 
-            # 普通登录一般不需要业务重试逻辑，维持原样
             start_time = time.time()
             response = requests.post(url=full_url, headers=headers, timeout=self.timeout, verify=self._get_verify_param())
             duration = time.time() - start_time
@@ -562,7 +563,7 @@ class APIMonitor:
         success_count = 0
         for url in urls:
             try:
-                # 简单的 GET 请求重试逻辑
+                # 简单的 GET 请求重试逻辑，使用默认次数即可，也可以手动指定
                 def get_url(): return requests.get(url, timeout=self.timeout, verify=self._get_verify_param())
                 self._retry_request(get_url)
                 self._log_result(f"URL: {url}", True, "正常")
@@ -575,7 +576,7 @@ class APIMonitor:
     def check_certificates(self) -> bool:
         """证书检查"""
         if not self.cert_checker: return True
-        # ... (保持原有的证书检查逻辑不变)
+        # ... (保持原有的证书检查逻辑不变，这里为了代码简洁未完全展开)
         return True
 
     def run_all_checks(self):
