@@ -4,7 +4,7 @@ on:
   push:
     branches: ["master"]
   schedule:
-    - cron: '*/30 * * * *'  # 每 30 分钟运行一次
+    - cron: '*/13 * * * *'  # 每 30 分钟运行一次
   workflow_dispatch:  # 允许手动触发
 
 jobs:
