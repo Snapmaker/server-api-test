@@ -1,12 +1,12 @@
-name: 服务保活通知
+name: SSL 证书检查
 
 on:
   schedule:
-    - cron: '56 1 * * *'  # 每天上午9:56点运行 (UTC+8转换为UTC时间)
+    - cron: '48 1 * * *'  # 每天上午9:48点运行
   workflow_dispatch:  # 允许手动触发
 
 jobs:
-  keepalive:
+  cert-check:
     runs-on: ubuntu-latest
     env:
       # 认证凭证（必需）
@@ -28,8 +28,15 @@ jobs:
       # 可选配置
       REQUEST_TIMEOUT: ${{ secrets.REQUEST_TIMEOUT || '30' }}
       FEISHU_API: ${{ secrets.FEISHU_API || '' }}
+      FEISHU_CERT_API: ${{ secrets.FEISHU_CERT_API || '' }}
       USER_CODE: ${{ secrets.USER_CODE || '' }}
       CHECK_REGION: ${{ secrets.CHECK_REGION || 'both' }}
+
+      # SSL 证书配置
+      ENABLE_SSL_VERIFY: ${{ secrets.ENABLE_SSL_VERIFY || 'true' }}
+      SSL_CERT_PATH: ${{ secrets.SSL_CERT_PATH || '' }}
+      CERT_CHECK_ENABLED: ${{ secrets.CERT_CHECK_ENABLED || 'true' }}
+      CERT_EXPIRY_WARNING_DAYS: ${{ secrets.CERT_EXPIRY_WARNING_DAYS || '15' }}
 
     steps:
     - name: 检出代码
@@ -46,21 +53,15 @@ jobs:
         cd Api_Check
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-    - name: 验证API监控系统运行状态
+    - name: 运行 SSL 证书检查
       run: |
         cd Api_Check
-        echo "开始验证API监控系统..."
-        python main.py
+        echo "开始检查所有 HTTPS 端点的 SSL 证书..."
+        python cert_check.py
 
-    - name: 发送保活确认通知
-      run: |
-        cd Api_Check
-        python keepalive.py
-
-    - name: 确认保活和验证完成
+    - name: 确认证书检查完成
       if: always()
       run: |
-        echo "✅ API监控系统验证完成"
-        echo "✅ 保活通知发送完成"
+        echo "✅ SSL 证书检查完成"
         echo "📅 执行时间: $(date)"
-        echo "🔄 下次运行: 明天上午10点"
+        echo "🔄 下次运行: 明天上午10点 (UTC+8)"
