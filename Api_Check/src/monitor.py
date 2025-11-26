@@ -994,7 +994,14 @@ class APIMonitor:
 
     def check_device_auth(self, sn: str = None, private_key: str = None, public_key: str = None) -> bool:
         """
-        检查设备认证服务（使用 webhook 校验）
+        检查设备认证服务（密钥注册和签名校验）
+
+        包含：
+        1. ECC 密钥对生成
+        2. 密钥注册激活
+        3. Webhook 签名校验
+
+        注意：不包含设备 Token 认证，Token 认证已拆分到 check_device_token_auth() 方法
 
         Args:
             sn: 设备序列号，默认使用配置中的 DEVICE_SN
@@ -1089,6 +1096,87 @@ class APIMonitor:
             }
             self._log_result(check_name, False, str(e))
             self._send_feishu_notification(self._format_error_notification(check_name, error_info))
+            return False
+
+    def check_device_token_auth(self) -> bool:
+        """
+        检查设备 Token 认证服务
+
+        前置条件：需要先执行 check_device_auth() 确保密钥已注册和签名已生成
+
+        Returns:
+            检查是否成功
+        """
+        check_name = "设备Token认证服务"
+
+        # 检查前置条件
+        if not self.sn or not self.ecc_sign or not self.nonce:
+            error_msg = "设备Token认证失败：缺少必要参数 (sn, ecc_sign, nonce)"
+            print(f"⚠ {error_msg}")
+            print("  提示：请先执行设备认证服务检查")
+            return True  # 返回 True 避免影响整体检查结果
+
+        try:
+            start_time = time.time()
+            print("  开始设备Token认证...")
+
+            # 构建 URL
+            url = f"{self.base_url}{self.config['endpoints']['login']}"
+            url_cn = f"{self.cn_base_url}{self.config['endpoints']['login']}"
+            check_region = settings.CHECK_REGION.lower()
+
+            auth_failed = False
+            failed_url = ""
+
+            # 检查国际区域
+            if check_region in ["intl", "both"]:
+                print(f"  检查国际区域: {url}")
+                if not self.device_token_auth(url):
+                    auth_failed = True
+                    failed_url = url
+
+            # 检查国内区域
+            if check_region in ["cn", "both"]:
+                print(f"  检查国内区域: {url_cn}")
+                if not self.device_token_auth(url_cn):
+                    auth_failed = True
+                    if not failed_url:
+                        failed_url = url_cn
+
+            duration = time.time() - start_time
+
+            if auth_failed:
+                self._log_result(check_name, False, f"设备Token认证失败 (耗时 {duration:.2f}秒)")
+                error_info = {
+                    "type": "DeviceTokenAuthError",
+                    "message": "设备Token认证失败",
+                    "url": failed_url,
+                    "duration": duration
+                }
+                self._send_feishu_notification(
+                    self._format_error_notification(check_name, error_info)
+                )
+                return False
+            else:
+                self._log_result(check_name, True, f"正常 (耗时 {duration:.2f}秒)")
+                return True
+
+        except Exception as e:
+            duration = time.time() - start_time if 'start_time' in locals() else 0
+            error_msg = f"设备Token认证过程出错: {e}"
+            print(f"✗ {error_msg}")
+
+            error_info = {
+                "type": e.__class__.__name__,
+                "message": str(e),
+                "url": url if 'url' in locals() else 'N/A',
+                "duration": duration
+            }
+
+            self._log_result(check_name, False, str(e))
+            self._send_feishu_notification(
+                self._format_error_notification(check_name, error_info)
+            )
             return False
 
     def check_url(self, url: str, retry: bool = True) -> bool:
@@ -1334,10 +1422,13 @@ class APIMonitor:
         test_account = os.getenv("USER_CODE") or settings.USER
         self.check_verification_code(test_account)
 
-        print("\n[3] 检查设备认证服务...")
+        print("\n[3] 检查设备密钥注册服务...")
         self.check_device_auth()
 
-        print("\n[4] 检查健康检查 URL...")
+        print("\n[4] 检查设备Token认证服务...")
+        self.check_device_token_auth()
+
+        print("\n[5] 检查健康检查 URL...")
         self.check_health_urls()
 
         # 输出总结
