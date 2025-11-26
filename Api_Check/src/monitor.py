@@ -130,8 +130,13 @@ class APIMonitor:
                         continue
                 raise  # 不可重试的HTTP错误或最后一次重试失败
             except Exception as e:
-                # 其他异常不重试，直接抛出
-                raise
+                # 所有其他异常也进行重试
+                if attempt < max_retries - 1:
+                    print(f"  ⚠ 发生错误 ({e.__class__.__name__}: {str(e)})，{retry_delay}秒后重试 ({attempt + 1}/{max_retries})")
+                    time.sleep(retry_delay)
+                    continue
+                else:
+                    raise  # 最后一次重试失败，抛出异常
 
         # 理论上不应该到这里
         return None, max_retries
@@ -696,9 +701,10 @@ class APIMonitor:
                     verify=self._get_verify_param()
                 )
 
-            # 使用重试机制
+            # 使用加强的重试机制(5次重试)
             print(f"  发送设备Token认证请求: {url}")
-            response, retry_count = self._retry_request(make_request)
+            print(f"  ℹ 关键API - 使用加强重试策略(最多5次)")
+            response, retry_count = self._retry_request(make_request, max_retries_override=15)
             duration = time.time() - start_time
 
             if retry_count > 0:
