@@ -5,7 +5,7 @@ import time
 import datetime
 import random
 import json
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List, Tuple
 from urllib.parse import urlencode
 from .config import settings, MONITOR_CONFIG
 from .cert_checker import CertificateChecker
@@ -623,7 +623,24 @@ class APIMonitor:
             self._send_feishu_notification(self._format_error_notification(check_name, error_info))
             return False
 
-    def device_token_auth(self,url) -> bool:
+    def _build_error_detail(self, url: str, error_type: str, error_message: str,
+                            http_status: Any = "N/A", error_code: Any = "N/A",
+                            response_body: Any = "", retry_count: int = 0,
+                            duration: float = 0) -> Dict[str, Any]:
+        """构建标准化错误详情"""
+        return {
+            "region": "国际区域" if "snapmaker.com" in url else "国内区域",
+            "url": url,
+            "error_type": error_type,
+            "error_message": error_message,
+            "http_status": http_status,
+            "error_code": error_code,
+            "response_body": response_body,
+            "retry_count": retry_count,
+            "duration": duration
+        }
+
+    def device_token_auth(self,url) -> Tuple[bool, Optional[Dict[str, Any]]]:
         """设备 Token 认证（向 OAuth2 端点请求设备 token）"""
         check_name = "设备Token认证"
 
@@ -636,14 +653,12 @@ class APIMonitor:
         if not self.sn or not self.ecc_sign or not self.nonce:
             error_msg = "设备Token认证失败：缺少必要参数 (sn, ecc_sign, nonce)"
             print(f"✗ {error_msg}")
-            error_info = {
-                "type": "ParameterError",
-                "message": error_msg,
-                "url": f"{self.base_url}/oauth2/token",
-                "duration": 0
-            }
-            self._send_feishu_notification(self._format_error_notification(check_name, error_info))
-            return False
+            error_detail = self._build_error_detail(
+                url=f"{self.base_url}/oauth2/token" if 'url' not in locals() else url,
+                error_type="ParameterError",
+                error_message=error_msg
+            )
+            return False, error_detail
 
         try:
             start_time = time.time()
@@ -694,19 +709,16 @@ class APIMonitor:
 
             # 如果JSON解析失败
             if json_error:
-                error_info = {
-                    "type": "ResponseParseError",
-                    "message": f"服务器返回了非JSON响应: {json_error.get('message', 'Unknown')}",
-                    "http_status": json_error.get('http_status', response.status_code),
-                    "response_body": json_error.get('response_text', ''),
-                    "content_type": json_error.get('content_type', 'unknown'),
-                    "url": url,
-                    "duration": duration,
-                    "retry_count": retry_count,
-                    "severity": "WARNING"  # 临时错误
-                }
-                self._send_feishu_notification(self._format_error_notification(check_name, error_info))
-                return False
+                error_detail = self._build_error_detail(
+                    url=url,
+                    error_type="ResponseParseError",
+                    error_message=f"服务器返回了非JSON响应: {json_error.get('message', 'Unknown')}",
+                    http_status=json_error.get('http_status', response.status_code),
+                    response_body=json_error.get('response_text', ''),
+                    retry_count=retry_count,
+                    duration=duration
+                )
+                return False, error_detail
 
             # print(f"  响应状态码: {response.status_code}")
             # print(f"  响应内容: {resp_json}")
@@ -720,26 +732,24 @@ class APIMonitor:
                     logger.info(f"成功获取Token，HTTP状态码: {response.status_code}")
                 print(f"✓ 设备Token认证成功 {url}")
                 print(f"  Access Token: {resp_json.get('data', {}).get('access_token', 'N/A')[:50]}...")
-                return True
+                return True, None
             else:
                 error_msg = resp_json.get('message', resp_json.get('msg', '未知错误'))
                 error_code = resp_json.get('code', 'N/A')
                 if logger:
                     logger.error(f"设备Token认证失败: {error_msg}")
                 print(f"✗ 设备Token认证失败 [code: {error_code}]: {error_msg}")
-                error_info = {
-                    "type": "BusinessError",
-                    "message": error_msg,
-                    "http_status": response.status_code,
-                    "error_code": error_code,
-                    "response_body": resp_json,
-                    "url": url,
-                    "duration": duration,
-                    "retry_count": retry_count,
-                    "severity": "ERROR"  # 业务错误，需人工介入
-                }
-                self._send_feishu_notification(self._format_error_notification(check_name, error_info))
-                return False
+                error_detail = self._build_error_detail(
+                    url=url,
+                    error_type="BusinessError",
+                    error_message=error_msg,
+                    http_status=response.status_code,
+                    error_code=error_code,
+                    response_body=resp_json,
+                    retry_count=retry_count,
+                    duration=duration
+                )
+                return False, error_detail
 
         except requests.exceptions.HTTPError as e:
             duration = time.time() - start_time if 'start_time' in locals() else 0
@@ -761,8 +771,16 @@ class APIMonitor:
                 except:
                     error_info["response_body"] = e.response.text
 
-            self._send_feishu_notification(self._format_error_notification(check_name, error_info))
-            return False
+            error_detail = self._build_error_detail(
+                url=error_info.get("url", "N/A"),
+                error_type="HTTPError",
+                error_message=str(e),
+                http_status=error_info.get("http_status", "N/A"),
+                error_code=error_info.get("error_code", "N/A"),
+                response_body=error_info.get("response_body", ""),
+                duration=error_info.get("duration", 0)
+            )
+            return False, error_detail
         except Exception as e:
             duration = time.time() - start_time if 'start_time' in locals() else 0
             error_msg = f"设备Token认证过程出错: {e}"
@@ -784,8 +802,16 @@ class APIMonitor:
                 except:
                     error_info["response_body"] = e.response.text
 
-            self._send_feishu_notification(self._format_error_notification(check_name, error_info))
-            return False
+            error_detail = self._build_error_detail(
+                url=error_info.get("url", "N/A"),
+                error_type=error_info.get("type", "UnknownError"),
+                error_message=error_info.get("message", str(e)),
+                http_status=error_info.get("http_status", "N/A"),
+                error_code=error_info.get("error_code", "N/A"),
+                response_body=error_info.get("response_body", ""),
+                duration=error_info.get("duration", 0)
+            )
+            return False, error_detail
 
     def _send_feishu_notification(self, message: str,feishu_url=settings.FEISHU_API):
         """发送飞书通知"""
@@ -881,6 +907,49 @@ class APIMonitor:
         # 添加重试信息（如果有）
         if 'retry_count' in error_info:
             notification += f"- 重试次数: {error_info['retry_count']}\n"
+
+        return notification
+
+    def _format_multi_region_error_notification(self, check_name: str, failed_regions: List[Dict]) -> str:
+        """
+        格式化多区域错误通知消息
+
+        Args:
+            check_name: 检查项名称
+            failed_regions: 失败区域的详细信息列表
+
+        Returns:
+            格式化的飞书通知消息
+        """
+        notification = (
+            f"🔴 API 监控告警 🔴\n"
+            f"- 检查项: {check_name}\n"
+            f"- 失败区域数: {len(failed_regions)}\n"
+            f"- 发生时间: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+        )
+
+        for idx, region_info in enumerate(failed_regions, 1):
+            notification += f"【失败区域 {idx}】\n"
+            notification += f"- 区域名称: {region_info.get('region', 'Unknown')}\n"
+            notification += f"- 请求地址: {region_info.get('url', 'N/A')}\n"
+            notification += f"- HTTP状态码: {region_info.get('http_status', 'N/A')}\n"
+            notification += f"- 业务错误码: {region_info.get('error_code', 'N/A')}\n"
+            notification += f"- 错误类型: {region_info.get('error_type', 'Unknown')}\n"
+            notification += f"- 错误信息: {region_info.get('error_message', 'Unknown')}\n"
+
+            # 响应体内容（限制长度避免消息过长）
+            response_body = region_info.get('response_body', '')
+            if isinstance(response_body, dict):
+                response_str = json.dumps(response_body, ensure_ascii=False)
+            else:
+                response_str = str(response_body)
+
+            if len(response_str) > 500:
+                response_str = response_str[:500] + "...(已截断)"
+            notification += f"- 响应内容: {response_str}\n"
+
+            notification += f"- 重试次数: {region_info.get('retry_count', 0)}\n"
+            notification += f"- 请求耗时: {region_info.get('duration', 0):.2f}秒\n\n"
 
         return notification
 
@@ -1125,40 +1194,33 @@ class APIMonitor:
             url_cn = f"{self.cn_base_url}{self.config['endpoints']['login']}"
             check_region = settings.CHECK_REGION.lower()
 
-            auth_failed = False
-            failed_url = ""
+            failed_regions = []  # 收集所有失败区域的详细信息
 
             # 检查国际区域
             if check_region in ["intl", "both"]:
                 print(f"  检查国际区域: {url}")
-                if not self.device_token_auth(url):
-                    auth_failed = True
-                    failed_url = url
+                success, error_detail = self.device_token_auth(url)
+                if not success:
+                    failed_regions.append(error_detail)
 
             # 检查国内区域
             if check_region in ["cn", "both"]:
                 print(f"  检查国内区域: {url_cn}")
-                if not self.device_token_auth(url_cn):
-                    auth_failed = True
-                    if not failed_url:
-                        failed_url = url_cn
+                success, error_detail = self.device_token_auth(url_cn)
+                if not success:
+                    failed_regions.append(error_detail)
 
             duration = time.time() - start_time
 
-            if auth_failed:
-                self._log_result(check_name, False, f"设备Token认证失败 (耗时 {duration:.2f}秒)")
-                error_info = {
-                    "type": "DeviceTokenAuthError",
-                    "message": "设备Token认证失败",
-                    "url": failed_url,
-                    "duration": duration
-                }
+            if failed_regions:
+                self._log_result(check_name, False,
+                                f"部分/全部区域认证失败 ({len(failed_regions)}个区域，耗时 {duration:.2f}秒)")
                 self._send_feishu_notification(
-                    self._format_error_notification(check_name, error_info)
+                    self._format_multi_region_error_notification(check_name, failed_regions)
                 )
                 return False
             else:
-                self._log_result(check_name, True, f"正常 (耗时 {duration:.2f}秒)")
+                self._log_result(check_name, True, f"所有区域认证成功 (耗时 {duration:.2f}秒)")
                 return True
 
         except Exception as e:
