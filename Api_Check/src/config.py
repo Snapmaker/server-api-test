@@ -88,7 +88,7 @@ MONITOR_CONFIG = {
 
     # 重试配置
     "retry": {
-        "max_retries": 3,
+        "max_retries": 10,
         "retry_delay": 2  # 秒
     },
 
@@ -97,5 +97,6 @@ MONITOR_CONFIG = {
         "timeout": 10,  # 单个证书检查超时（秒）
     }
 }
+
 
 
