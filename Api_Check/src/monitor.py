@@ -1004,8 +1004,8 @@ class APIMonitor:
         Returns:
             检查是否成功
         """
-        check_name = "设备认证服务"
-
+        check_name = "设备密钥注册服务"
+        url=""
         try:
             start_time = time.time()
             key_generated = False  # 标记是否生成了新密钥
@@ -1052,39 +1052,39 @@ class APIMonitor:
             if needs_registration:
                 print("  开始密钥注册激活...")
                 if not self.ecc_action():
+                    url=settings.DEVICE_SECRET_REGISTER_URL
                     raise Exception("密钥注册激活失败 (密钥已保留，可下次重试)")
 
             # 5. 调用 webhook 校验签名
             print("  开始 webhook 签名校验...")
             if not self.chack_private_key():
+                url = settings.DEVICE_SECRET_CHECK_URL
                 raise Exception("Webhook 签名校验失败")
 
             # 6. 设备 Token 认证
-            print("  开始设备Token认证...")
-            url=f"{self.base_url}{self.config['endpoints']['login']}"
-            url_cn = f"{self.cn_base_url}{self.config['endpoints']['login']}"
-            check_region = settings.CHECK_REGION.lower()
-
-            auth_failed = False
-            if check_region in ["intl", "both"]:
-                if not self.device_token_auth(url):
-                    auth_failed = True
-            if check_region in ["cn", "both"]:
-                if not self.device_token_auth(url_cn):
-                    auth_failed = True
-            if auth_failed:
-                raise Exception("设备Token认证失败")
-
+            # print("  开始设备密钥校验...")
+            # url=f"{self.base_url}{self.config['endpoints']['login']}"
+            # url_cn = f"{self.cn_base_url}{self.config['endpoints']['login']}"
+            # check_region = settings.CHECK_REGION.lower()
+            #
+            # auth_failed = False
+            # if check_region in ["intl", "both"]:
+            #     if not self.device_token_auth(url):
+            #         auth_failed = True
+            # if check_region in ["cn", "both"]:
+            #     if not self.device_token_auth(url_cn):
+            #         auth_failed = True
+            # if auth_failed:
+            #     raise Exception("设备Token认证失败"
             duration = time.time() - start_time
             self._log_result(check_name, True, f"正常 (耗时 {duration:.2f}秒)")
             return True
-
         except Exception as e:
             duration = time.time() - start_time
             error_info = {
                 "type": e.__class__.__name__,
                 "message": str(e),
-                "url": settings.DEVICE_SECRET_CHECK_URL,
+                "url": url,
                 "duration": duration
             }
             self._log_result(check_name, False, str(e))
