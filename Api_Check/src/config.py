@@ -88,7 +88,7 @@ MONITOR_CONFIG = {
 
     # 重试配置
     "retry": {
-        "max_retries": 10,
+        "max_retries": 15,  # 提高成功率
         "retry_delay": 2  # 秒
     },
 
