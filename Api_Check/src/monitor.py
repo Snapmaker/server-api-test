@@ -563,7 +563,7 @@ class APIMonitor:
             }
 
             # 业务层重试配置
-            max_business_retries = 5
+            max_business_retries = 15
             retry_delay = self.config['retry']['retry_delay']
             total_retry_count = 0
 
@@ -747,7 +747,7 @@ class APIMonitor:
                 logger.debug(f"请求头: {headers}")
 
             # 业务层重试配置
-            max_business_retries = 5
+            max_business_retries = 15
             retry_delay = self.config['retry']['retry_delay']
             total_retry_count = 0
 
