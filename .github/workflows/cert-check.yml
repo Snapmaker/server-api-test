@@ -2,7 +2,7 @@ name: SSL 证书检查
 
 on:
   schedule:
-    - cron: '48 1 * * *'  # 每天上午9:48点运行
+    - cron: '14 0 * * *'  # 每天上午8:14点运行
   workflow_dispatch:  # 允许手动触发
 
 jobs:
