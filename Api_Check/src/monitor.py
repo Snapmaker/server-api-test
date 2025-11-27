@@ -87,7 +87,7 @@ class APIMonitor:
         credentials = f"{settings.CLIENT_ID}:{settings.CLIENT_SECRET}"
         return f"Basic {base64.b64encode(credentials.encode()).decode()}"
 
-    def _retry_request(self, func, *args, retry_on_status_codes=[500, 502, 503, 504], max_retries_override=None, **kwargs):
+    def _retry_request(self, func, *args, retry_on_status_codes=[500, 502, 503, 504], max_retries_override=15, **kwargs):
         """
         重试请求辅助方法
 
@@ -396,7 +396,7 @@ class APIMonitor:
                     print(f"  发送密钥注册请求: {url}")
                     print(f"  ℹ 关键API - 使用加强重试策略（最多15次）")
 
-                response, retry_count = self._retry_request(make_request, max_retries_override=5)
+                response, retry_count = self._retry_request(make_request, max_retries_override=15)
                 total_retry_count += retry_count
                 duration = time.time() - start_time
 
@@ -578,7 +578,7 @@ class APIMonitor:
                     print(f"  发送签名校验请求: {url}")
                     print(f"  ℹ 关键API - 使用加强重试策略（最多5次）")
 
-                response, retry_count = self._retry_request(make_request, max_retries_override=5)
+                response, retry_count = self._retry_request(make_request, max_retries_override=15)
                 total_retry_count += retry_count
                 duration = time.time() - start_time
 
