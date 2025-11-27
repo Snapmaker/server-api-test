@@ -2,7 +2,7 @@ name: 服务保活通知
 
 on:
   schedule:
-    - cron: '56 1 * * *'  # 每天上午9:56点运行 (UTC+8转换为UTC时间)
+    - cron: '12 0 * * *'  # 每天上午9:56点运行 (UTC+8转换为UTC时间)
   workflow_dispatch:  # 允许手动触发
 
 jobs:
