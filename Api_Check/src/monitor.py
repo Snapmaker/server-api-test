@@ -102,44 +102,60 @@ class APIMonitor:
         """
         max_retries = max_retries_override if max_retries_override is not None else self.config['retry']['max_retries']
         retry_delay = self.config['retry']['retry_delay']
+        actual_retry_count = 0  # 实际重试次数（不包括400错误的尝试）
 
-        for attempt in range(max_retries):
+        attempt = 0
+        while attempt < max_retries:
             try:
                 result = func(*args, **kwargs)
-                return result, attempt  # 成功，返回结果和重试次数
+                return result, actual_retry_count  # 成功，返回结果和实际重试次数
             except requests.exceptions.Timeout as e:
+                actual_retry_count += 1
                 if attempt < max_retries - 1:
-                    print(f"  ⚠ 请求超时，{retry_delay}秒后重试 ({attempt + 1}/{max_retries})")
+                    print(f"  ⚠ 请求超时，{retry_delay}秒后重试 ({actual_retry_count}/{max_retries})")
                     time.sleep(retry_delay)
+                    attempt += 1
                     continue
                 else:
                     raise  # 最后一次重试失败，抛出异常
             except requests.exceptions.ConnectionError as e:
+                actual_retry_count += 1
                 if attempt < max_retries - 1:
-                    print(f"  ⚠ 连接错误，{retry_delay}秒后重试 ({attempt + 1}/{max_retries})")
+                    print(f"  ⚠ 连接错误，{retry_delay}秒后重试 ({actual_retry_count}/{max_retries})")
                     time.sleep(retry_delay)
+                    attempt += 1
                     continue
                 else:
                     raise
             except requests.exceptions.HTTPError as e:
+                # 400 业务错误不重试，直接抛出，并且不计入重试次数
+                if hasattr(e, 'response') and e.response.status_code == 400:
+                    print(f"  ℹ HTTP 400 业务错误，不进行重试且不计入重试次数")
+                    raise
                 # 检查是否是可重试的状态码
                 if hasattr(e, 'response') and e.response.status_code in retry_on_status_codes:
+                    actual_retry_count += 1
                     if attempt < max_retries - 1:
-                        print(f"  ⚠ HTTP {e.response.status_code}错误，{retry_delay}秒后重试 ({attempt + 1}/{max_retries})")
+                        print(f"  ⚠ HTTP {e.response.status_code}错误，{retry_delay}秒后重试 ({actual_retry_count}/{max_retries})")
                         time.sleep(retry_delay)
+                        attempt += 1
                         continue
                 raise  # 不可重试的HTTP错误或最后一次重试失败
             except Exception as e:
                 # 所有其他异常也进行重试
+                actual_retry_count += 1
                 if attempt < max_retries - 1:
-                    print(f"  ⚠ 发生错误 ({e.__class__.__name__}: {str(e)})，{retry_delay}秒后重试 ({attempt + 1}/{max_retries})")
+                    print(f"  ⚠ 发生错误 ({e.__class__.__name__}: {str(e)})，{retry_delay}秒后重试 ({actual_retry_count}/{max_retries})")
                     time.sleep(retry_delay)
+                    attempt += 1
                     continue
                 else:
                     raise  # 最后一次重试失败，抛出异常
 
+            attempt += 1
+
         # 理论上不应该到这里
-        return None, max_retries
+        return None, actual_retry_count
 
     def _safe_json_parse(self, response, context: str = ""):
         """
@@ -403,6 +419,30 @@ class APIMonitor:
                 if retry_count > 0:
                     print(f"  ℹ 经过 {retry_count} 次HTTP重试后成功")
 
+                # 检查是否为 HTTP 400 错误，如果是则不进行业务重试
+                if response.status_code == 400:
+                    print(f"  ℹ HTTP 400 业务错误，跳过业务重试")
+                    # 尝试解析响应以获取错误信息
+                    rq_json, json_error = self._safe_json_parse(response, "密钥注册")
+                    error_msg = rq_json.get('message', rq_json.get('msg', '未知错误')) if rq_json else '无法解析错误信息'
+                    error_code = rq_json.get('code', 'N/A') if rq_json else 'N/A'
+
+                    self.key_registration_status = "failed"
+                    print(f"✗ 密钥注册失败 [HTTP 400, code: {error_code}]: {error_msg}")
+                    error_info = {
+                        "type": "BusinessError",
+                        "message": f"{error_msg} (HTTP 400 不重试)",
+                        "http_status": 400,
+                        "error_code": error_code,
+                        "response_body": rq_json if rq_json else json_error.get('response_text', ''),
+                        "url": url,
+                        "duration": duration,
+                        "retry_count": total_retry_count,
+                        "severity": "ERROR"
+                    }
+                    self._send_feishu_notification(self._format_error_notification(check_name, error_info))
+                    return False
+
                 # 使用安全JSON解析
                 rq_json, json_error = self._safe_json_parse(response, "密钥注册")
 
@@ -584,6 +624,31 @@ class APIMonitor:
 
                 if retry_count > 0:
                     print(f"  ℹ 经过 {retry_count} 次HTTP重试后成功")
+
+                # 检查是否为 HTTP 400 错误，如果是则不进行业务重试
+                if response.status_code == 400:
+                    print(f"  ℹ HTTP 400 业务错误，跳过业务重试")
+                    # 尝试解析响应以获取错误信息
+                    rq_json, json_error = self._safe_json_parse(response, "签名校验")
+                    error_msg = rq_json.get('message', rq_json.get('msg', '未知错误')) if rq_json else '无法解析错误信息'
+                    error_code = rq_json.get('code', 'N/A') if rq_json else 'N/A'
+
+                    if logger:
+                        logger.info("校验失败")
+                    print(f"✗ 签名校验失败 [HTTP 400, code: {error_code}]: {error_msg}")
+                    error_info = {
+                        "type": "BusinessError",
+                        "message": f"{error_msg} (HTTP 400 不重试)",
+                        "http_status": 400,
+                        "error_code": error_code,
+                        "response_body": rq_json if rq_json else json_error.get('response_text', ''),
+                        "url": url,
+                        "duration": duration,
+                        "retry_count": total_retry_count,
+                        "severity": "ERROR"
+                    }
+                    self._send_feishu_notification(self._format_error_notification(check_name, error_info))
+                    return False
 
                 # 使用安全JSON解析
                 rq_json, json_error = self._safe_json_parse(response, "签名校验")
@@ -774,6 +839,29 @@ class APIMonitor:
 
                 if retry_count > 0:
                     print(f"  ℹ 经过 {retry_count} 次HTTP重试后成功")
+
+                # 检查是否为 HTTP 400 错误，如果是则不进行业务重试
+                if response.status_code == 400:
+                    print(f"  ℹ HTTP 400 业务错误，跳过业务重试")
+                    # 尝试解析响应以获取错误信息
+                    resp_json, json_error = self._safe_json_parse(response, "设备Token认证")
+                    error_msg = resp_json.get('message', resp_json.get('msg', '未知错误')) if resp_json else '无法解析错误信息'
+                    error_code = resp_json.get('code', 'N/A') if resp_json else 'N/A'
+
+                    if logger:
+                        logger.error(f"设备Token认证失败: {error_msg}")
+                    print(f"✗ 设备Token认证失败 [HTTP 400, code: {error_code}]: {error_msg}")
+                    error_detail = self._build_error_detail(
+                        url=url,
+                        error_type="BusinessError",
+                        error_message=f"{error_msg} (HTTP 400 不重试)",
+                        http_status=400,
+                        error_code=error_code,
+                        response_body=resp_json if resp_json else json_error.get('response_text', ''),
+                        retry_count=total_retry_count,
+                        duration=duration
+                    )
+                    return False, error_detail
 
                 # 使用安全JSON解析
                 resp_json, json_error = self._safe_json_parse(response, "设备Token认证")
