@@ -381,7 +381,7 @@ class APIMonitor:
             }
 
             # 业务层重试配置
-            max_business_retries = 5
+            max_business_retries = 15
             retry_delay = self.config['retry']['retry_delay']
             total_retry_count = 0
 
@@ -394,7 +394,7 @@ class APIMonitor:
                 # 使用加强的重试机制（5次重试）
                 if business_attempt == 0:
                     print(f"  发送密钥注册请求: {url}")
-                    print(f"  ℹ 关键API - 使用加强重试策略（最多5次）")
+                    print(f"  ℹ 关键API - 使用加强重试策略（最多15次）")
 
                 response, retry_count = self._retry_request(make_request, max_retries_override=5)
                 total_retry_count += retry_count
