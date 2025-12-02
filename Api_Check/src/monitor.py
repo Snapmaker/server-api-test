@@ -1650,20 +1650,20 @@ class APIMonitor:
         check_region = settings.CHECK_REGION.lower()
         if check_region in ["intl", "both"]:
             self.check_login("国际登录服务", "intl")
-        if check_region in ["cn", "both"]:
-            self.check_login("国内登录服务","cn")
+        # if check_region in ["cn", "both"]:
+        #     self.check_login("国内登录服务","cn")
 
 
-        print("\n[2] 检查验证码服务...")
-        import os
-        test_account = os.getenv("USER_CODE") or settings.USER
-        self.check_verification_code(test_account)
+        # print("\n[2] 检查验证码服务...")
+        # import os
+        # test_account = os.getenv("USER_CODE") or settings.USER
+        # self.check_verification_code(test_account)
 
-        print("\n[3] 检查设备密钥注册服务...")
-        self.check_device_auth()
+        # print("\n[3] 检查设备密钥注册服务...")
+        # self.check_device_auth()
 
-        print("\n[4] 检查设备Token认证服务...")
-        self.check_device_token_auth()
+        # print("\n[4] 检查设备Token认证服务...")
+        # self.check_device_token_auth()
 
         print("\n[5] 检查健康检查 URL...")
         self.check_health_urls()
