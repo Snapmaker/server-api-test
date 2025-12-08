@@ -1646,10 +1646,10 @@ class APIMonitor:
         self.results = []
 
         # 执行各项检查
-        print("\n[1] 检查登录服务...")
-        check_region = settings.CHECK_REGION.lower()
-        if check_region in ["intl", "both"]:
-            self.check_login("国际登录服务", "intl")
+        # print("\n[1] 检查登录服务...")
+        # check_region = settings.CHECK_REGION.lower()
+        # if check_region in ["intl", "both"]:
+        #     self.check_login("国际登录服务", "intl")
         # if check_region in ["cn", "both"]:
         #     self.check_login("国内登录服务","cn")
 
@@ -1665,8 +1665,8 @@ class APIMonitor:
         # print("\n[4] 检查设备Token认证服务...")
         # self.check_device_token_auth()
 
-        print("\n[5] 检查健康检查 URL...")
-        self.check_health_urls()
+        # print("\n[5] 检查健康检查 URL...")
+        # self.check_health_urls()
 
         # 输出总结
         self._print_summary()
